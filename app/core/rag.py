@@ -22,6 +22,8 @@ import uuid
 
 from app.config import Settings
 from app.core.bm25 import BM25Store
+from app.core.condenser import build_condenser
+from app.core.conversation import ConversationStore
 from app.core.docstore import DocStore
 from app.core.embeddings import build_embedding_provider
 from app.core.generator import build_generator
@@ -30,7 +32,7 @@ from app.core.reranker import build_reranker
 from app.core.retriever import Retriever
 from app.core.tenants import QuotaExceeded, Tenant, TenantRegistry
 from app.core.vector_store import VectorStore
-from app.models import Citation, QueryResponse
+from app.models import ChatResponse, Citation, QueryResponse
 from app.observability.metrics import METRICS
 
 
@@ -63,6 +65,8 @@ class RagEngine:
         )
         self.reranker = build_reranker(settings)
         self.generator = build_generator(settings)
+        self.conversations = ConversationStore(settings.data_dir / "conversations.db")
+        self.condenser = build_condenser(settings)
 
         if not settings.is_single_tenant:
             self._seed_static_tenants()
@@ -193,25 +197,7 @@ class RagEngine:
         if generation.tokens.get("total"):
             METRICS.increment("tokens_total", generation.tokens["total"])
 
-        citations = [
-            Citation(
-                doc_id=ch.record.doc_id,
-                source=ch.record.source,
-                chunk_index=ch.record.chunk_index,
-                score=round(ch.score, 4),
-                vector_score=(
-                    round(ch.vector_score, 4) if ch.vector_score is not None else None
-                ),
-                bm25_score=(
-                    round(ch.bm25_score, 4) if ch.bm25_score is not None else None
-                ),
-                rerank_score=(
-                    round(ch.rerank_score, 4) if ch.rerank_score is not None else None
-                ),
-                snippet=_snippet(ch.record.text),
-            )
-            for ch in chunks
-        ]
+        citations = _to_citations(chunks)
 
         return QueryResponse(
             answer=generation.answer,
@@ -226,6 +212,101 @@ class RagEngine:
             request_id=request_id,
         )
 
+    # -- multi-turn chat --------------------------------------------------- #
+    def chat(
+        self,
+        *,
+        tenant: str,
+        message: str,
+        session_id: str | None = None,
+        top_k: int | None = None,
+        filters: dict[str, str] | None = None,
+    ) -> ChatResponse:
+        """One conversational turn: condense → retrieve → generate → persist.
+
+        Maintains per-session history so follow-ups resolve against earlier
+        turns. A new ``session_id`` is minted when none is supplied.
+        """
+        request_id = uuid.uuid4().hex
+        session_id = session_id or uuid.uuid4().hex
+        cfg = self._tenant_config(tenant)
+
+        # Same daily quota as /query (a chat turn is a retrieval + generation).
+        if cfg and cfg.max_queries_per_day > 0:
+            if self.tenants.queries_today(tenant) >= cfg.max_queries_per_day:
+                raise QuotaExceeded("max_queries_per_day", cfg.max_queries_per_day)
+        if cfg:
+            self.tenants.record_query(tenant)
+        METRICS.increment("chat_turns")
+
+        self.conversations.ensure_session(tenant, session_id)
+        history = self.conversations.recent_messages(
+            tenant, session_id, self._settings.chat_history_turns
+        )
+
+        # Rewrite the follow-up into a standalone query for retrieval.
+        standalone = self.condenser.condense(history, message)
+
+        final_k = top_k or self._settings.retrieval_top_k
+        t0 = time.perf_counter()
+        candidates = self.retriever.retrieve(
+            tenant=tenant, question=standalone,
+            limit=self._candidate_pool(final_k), filters=filters,
+        )
+        chunks = self.reranker.rerank(standalone, candidates, top_n=final_k)
+        chunks = chunks[: self._settings.max_context_chunks]
+        retrieval_ms = (time.perf_counter() - t0) * 1000
+        METRICS.observe("retrieval_ms", retrieval_ms)
+
+        # Generate, giving the model the recent turns for reference resolution.
+        history_messages = [
+            {"role": m.role, "content": m.content} for m in history
+        ]
+        system_prompt = cfg.prompt_template if cfg else None
+        t1 = time.perf_counter()
+        generation = self.generator.generate(
+            message, chunks, system_prompt, history_messages
+        )
+        generation_ms = (time.perf_counter() - t1) * 1000
+        METRICS.observe("generation_ms", generation_ms)
+        if generation.tokens.get("total"):
+            METRICS.increment("tokens_total", generation.tokens["total"])
+
+        citations = _to_citations(chunks)
+
+        # Persist the turn (user message, then assistant reply + its citations).
+        self.conversations.append_message(
+            tenant=tenant, session_id=session_id, role="user", content=message
+        )
+        turn_index = self.conversations.append_message(
+            tenant=tenant, session_id=session_id, role="assistant",
+            content=generation.answer,
+            citations=[c.model_dump() for c in citations],
+        )
+
+        return ChatResponse(
+            session_id=session_id,
+            turn_index=turn_index,
+            answer=generation.answer,
+            citations=citations,
+            standalone_question=standalone,
+            model=generation.model,
+            retrieval_mode=self._settings.retrieval_mode,
+            reranker=self.reranker.name,
+            condenser=self.condenser.name,
+            retrieval_ms=round(retrieval_ms, 2),
+            generation_ms=round(generation_ms, 2),
+            tokens=generation.tokens,
+            request_id=request_id,
+        )
+
+    def get_conversation(self, *, tenant: str, session_id: str):
+        """Return the full message history for a session (empty if unknown)."""
+        return self.conversations.get_messages(tenant, session_id)
+
+    def delete_conversation(self, *, tenant: str, session_id: str) -> int:
+        return self.conversations.delete_session(tenant, session_id)
+
     def delete_document(self, *, tenant: str, doc_id: str) -> int:
         removed = self.ingestion.delete_document(tenant=tenant, doc_id=doc_id)
         self.bm25.invalidate(tenant)
@@ -239,6 +320,7 @@ class RagEngine:
         self.vector_store.drop_tenant(tenant)
         self.docstore.delete_tenant(tenant)
         self.bm25.invalidate(tenant)
+        self.conversations.delete_tenant(tenant)
 
     def tenant_stats(self, tenant: str) -> dict[str, object]:
         """Runtime stats for the current tenant (used by GET /v1/me)."""
@@ -254,6 +336,28 @@ class RagEngine:
                 "max_queries_per_day": cfg.max_queries_per_day if cfg else 0,
             },
         }
+
+
+def _to_citations(chunks) -> list[Citation]:
+    return [
+        Citation(
+            doc_id=ch.record.doc_id,
+            source=ch.record.source,
+            chunk_index=ch.record.chunk_index,
+            score=round(ch.score, 4),
+            vector_score=(
+                round(ch.vector_score, 4) if ch.vector_score is not None else None
+            ),
+            bm25_score=(
+                round(ch.bm25_score, 4) if ch.bm25_score is not None else None
+            ),
+            rerank_score=(
+                round(ch.rerank_score, 4) if ch.rerank_score is not None else None
+            ),
+            snippet=_snippet(ch.record.text),
+        )
+        for ch in chunks
+    ]
 
 
 def _snippet(text: str, limit: int = 240) -> str:

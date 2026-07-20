@@ -96,6 +96,12 @@ class Settings(BaseSettings):
     max_context_chunks: int = 6
     generation_temperature: float = 0.1
 
+    # --- Multi-turn chat (see docs/12-multi-turn-chat.md) -----------------
+    # How many prior messages to feed the generator as conversation context.
+    chat_history_turns: int = 8
+    # Rewrite follow-up questions into standalone queries before retrieval.
+    chat_condense_question: bool = True
+
     # --- Server -----------------------------------------------------------
     log_level: str = "INFO"
 

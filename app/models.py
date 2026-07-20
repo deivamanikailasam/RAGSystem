@@ -91,6 +91,57 @@ class DeleteResponse(BaseModel):
     removed_vectors: int
 
 
+# --------------------------------------------------------------------------- #
+# Multi-turn chat
+# --------------------------------------------------------------------------- #
+class ChatRequest(BaseModel):
+    message: str = Field(..., min_length=1)
+    session_id: str | None = Field(
+        default=None,
+        description="Conversation to continue. Omit to start a new session; "
+        "the created id is returned in the response.",
+    )
+    top_k: int | None = None
+    filters: dict[str, str] = Field(default_factory=dict)
+
+
+class ChatResponse(BaseModel):
+    session_id: str
+    turn_index: int
+    answer: str
+    citations: list[Citation]
+    standalone_question: str = Field(
+        ..., description="The follow-up rewritten for retrieval (may equal the input)."
+    )
+    model: str
+    retrieval_mode: str
+    reranker: str
+    condenser: str
+    retrieval_ms: float
+    generation_ms: float
+    tokens: dict[str, int] = Field(default_factory=dict)
+    request_id: str
+
+
+class ChatMessage(BaseModel):
+    turn_index: int
+    role: str
+    content: str
+    citations: list[dict] = Field(default_factory=list)
+    created_at: float
+
+
+class ConversationResponse(BaseModel):
+    session_id: str
+    tenant: str
+    messages: list[ChatMessage]
+
+
+class DeleteConversationResponse(BaseModel):
+    session_id: str
+    deleted_messages: int
+
+
 class HealthResponse(BaseModel):
     status: str
     version: str

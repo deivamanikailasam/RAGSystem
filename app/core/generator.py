@@ -45,17 +45,27 @@ def build_messages(
     question: str,
     chunks: list[RetrievedChunk],
     system_prompt: str | None = None,
+    history: list[dict[str, str]] | None = None,
 ) -> list[dict[str, str]]:
+    """Assemble chat messages: system → prior turns → grounded user turn.
+
+    ``history`` (prior user/assistant messages) lets the model resolve
+    references and keep tone across a multi-turn conversation; the grounding
+    guardrails and retrieved context still gate the final answer.
+    """
     context = build_context_block(chunks)
     user = (
         f"Context passages:\n{context}\n\n"
         f"Question: {question}\n\n"
         "Answer using only the context above and cite passage numbers."
     )
-    return [
-        {"role": "system", "content": system_prompt or SYSTEM_PROMPT},
-        {"role": "user", "content": user},
+    messages: list[dict[str, str]] = [
+        {"role": "system", "content": system_prompt or SYSTEM_PROMPT}
     ]
+    if history:
+        messages.extend(history)
+    messages.append({"role": "user", "content": user})
+    return messages
 
 
 class ExtractiveGenerator:
@@ -68,10 +78,11 @@ class ExtractiveGenerator:
         question: str,
         chunks: list[RetrievedChunk],
         system_prompt: str | None = None,
+        history: list[dict[str, str]] | None = None,
     ) -> Generation:
-        # The extractive fallback ignores the prompt template (it does not call
-        # an LLM), but accepts the argument to share the generator interface.
-        _ = system_prompt
+        # The extractive fallback ignores the prompt template + history (it does
+        # not call an LLM), but accepts them to share the generator interface.
+        _ = (system_prompt, history)
         if not chunks:
             return Generation(
                 answer="I don't know based on the available documents.",
@@ -103,6 +114,7 @@ class OpenAIGenerator:
         question: str,
         chunks: list[RetrievedChunk],
         system_prompt: str | None = None,
+        history: list[dict[str, str]] | None = None,
     ) -> Generation:
         if not chunks:
             return Generation(
@@ -110,7 +122,7 @@ class OpenAIGenerator:
                 model=self.model,
                 tokens={},
             )
-        messages = build_messages(question, chunks, system_prompt)
+        messages = build_messages(question, chunks, system_prompt, history)
         resp = self._client.chat.completions.create(
             model=self.model,
             messages=messages,

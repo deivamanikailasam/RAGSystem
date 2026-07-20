@@ -14,6 +14,11 @@ from app import __version__
 from app.core.rag import RagEngine
 from app.deps import get_engine, require_tenant
 from app.models import (
+    ChatMessage,
+    ChatRequest,
+    ChatResponse,
+    ConversationResponse,
+    DeleteConversationResponse,
     DeleteResponse,
     HealthResponse,
     IngestedDoc,
@@ -109,6 +114,63 @@ def query(
         top_k=body.top_k,
         filters=body.filters,
     )
+
+
+@router.post("/v1/chat", response_model=ChatResponse, tags=["chat"])
+def chat(
+    body: ChatRequest,
+    tenant: str = Depends(require_tenant),
+    engine: RagEngine = Depends(get_engine),
+) -> ChatResponse:
+    """Send one conversational turn; continues a session or starts a new one."""
+    return engine.chat(
+        tenant=tenant,
+        message=body.message,
+        session_id=body.session_id,
+        top_k=body.top_k,
+        filters=body.filters,
+    )
+
+
+@router.get(
+    "/v1/chat/{session_id}", response_model=ConversationResponse, tags=["chat"]
+)
+def get_conversation(
+    session_id: str,
+    tenant: str = Depends(require_tenant),
+    engine: RagEngine = Depends(get_engine),
+) -> ConversationResponse:
+    messages = engine.get_conversation(tenant=tenant, session_id=session_id)
+    if not messages:
+        raise HTTPException(status_code=404, detail="Conversation not found.")
+    return ConversationResponse(
+        session_id=session_id,
+        tenant=tenant,
+        messages=[
+            ChatMessage(
+                turn_index=m.turn_index,
+                role=m.role,
+                content=m.content,
+                citations=m.citations,
+                created_at=m.created_at,
+            )
+            for m in messages
+        ],
+    )
+
+
+@router.delete(
+    "/v1/chat/{session_id}",
+    response_model=DeleteConversationResponse,
+    tags=["chat"],
+)
+def delete_conversation(
+    session_id: str,
+    tenant: str = Depends(require_tenant),
+    engine: RagEngine = Depends(get_engine),
+) -> DeleteConversationResponse:
+    deleted = engine.delete_conversation(tenant=tenant, session_id=session_id)
+    return DeleteConversationResponse(session_id=session_id, deleted_messages=deleted)
 
 
 @router.delete(

@@ -124,6 +124,9 @@ DEPLOYMENT_MODE=multi_tenant ADMIN_API_KEY=secret uvicorn app.main:app
 | GET    | `/health`        | Liveness/readiness probe                      | none |
 | GET    | `/metrics`       | In-process counters & latency histograms      | none |
 | GET    | `/v1/me`         | Caller's tenant, usage & quotas               | tenant |
+| POST   | `/v1/chat`       | Multi-turn chat turn (context-tracked)        | tenant |
+| GET    | `/v1/chat/{id}`  | Conversation history                          | tenant |
+| DELETE | `/v1/chat/{id}`  | Delete a conversation                         | tenant |
 | POST   | `/v1/ingest`     | Ingest raw text                               | tenant |
 | POST   | `/v1/ingest/file`| Ingest an uploaded file (PDF/MD/TXT/HTML)     | tenant |
 | POST   | `/v1/query`      | Ask a question (RAG)                          | tenant |
@@ -158,7 +161,9 @@ app/
     bm25.py            # sparse BM25 inverted index (per tenant)
     fusion.py          # RRF + weighted fusion of dense & sparse results
     reranker.py        # stage 2: none/lexical(BM25)/cross-encoder/llm rerankers
-    generator.py       # prompt assembly + LLM call + fallback
+    generator.py       # prompt assembly (history-aware) + LLM call + fallback
+    conversation.py    # per-tenant multi-turn chat history (SQLite)
+    condenser.py       # follow-up -> standalone question rewriting
     rag.py             # end-to-end orchestration + per-tenant policy/quotas
   api/routes.py        # tenant HTTP endpoints
   api/admin.py         # /admin/* tenant control plane (multi-tenant)
@@ -194,6 +199,8 @@ All configuration is environment-driven (12-factor). See
 | `HYBRID_FUSION`          | `rrf`              | `rrf` or `weighted`                  |
 | `RERANK_STRATEGY`        | `lexical`          | `none`/`lexical`/`cross_encoder`/`llm` |
 | `RERANK_CANDIDATES`      | `20`               | Candidate pool size before reranking |
+| `CHAT_HISTORY_TURNS`     | `8`                | Prior messages fed to the chatbot    |
+| `CHAT_CONDENSE_QUESTION` | `true`             | Rewrite follow-ups before retrieval  |
 | `DATA_DIR`               | `./data`           | Where indices + docstore live        |
 
 ---
@@ -226,6 +233,8 @@ brief, each with step-by-step instructions and pointers to the implementing code
 8. [Reranking stage: two-stage retrieve-then-rerank](docs/08-reranking.md)
 9. [Hybrid retrieval: BM25 + vector search](docs/09-hybrid-retrieval.md)
 10. [Tenant isolation: index-per-tenant vs shared namespace](docs/10-tenant-isolation.md)
+11. [Retrieval evaluation: precision / recall / MAP / nDCG](docs/11-retrieval-evaluation.md)
+12. [Multi-turn chatbot with context tracking](docs/12-multi-turn-chat.md)
 
 ---
 
