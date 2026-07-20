@@ -23,7 +23,14 @@ from app.models import (
     DialogueRequest,
     DialogueResponse,
     DialogueStateResponse,
+    FAQAskRequest,
+    FAQAskResponse,
+    FAQCreate,
+    FAQItem,
+    FAQListResponse,
     IntentEventModel,
+    MemoryItem,
+    MemoryListResponse,
     HealthResponse,
     IngestedDoc,
     IngestRequest,
@@ -181,6 +188,83 @@ def delete_conversation(
 ) -> DeleteConversationResponse:
     deleted = engine.delete_conversation(tenant=tenant, session_id=session_id)
     return DeleteConversationResponse(session_id=session_id, deleted_messages=deleted)
+
+
+@router.post("/v1/faqs", response_model=FAQItem, tags=["faq"])
+def add_faq(
+    body: FAQCreate,
+    tenant: str = Depends(require_tenant),
+    engine: RagEngine = Depends(get_engine),
+) -> FAQItem:
+    faq = engine.add_faq(tenant=tenant, question=body.question, answer=body.answer,
+                         tags=body.tags, faq_id=body.faq_id)
+    return FAQItem(faq_id=faq.faq_id, question=faq.question, answer=faq.answer,
+                   tags=faq.tags, created_at=faq.created_at)
+
+
+@router.get("/v1/faqs", response_model=FAQListResponse, tags=["faq"])
+def list_faqs(
+    tenant: str = Depends(require_tenant),
+    engine: RagEngine = Depends(get_engine),
+) -> FAQListResponse:
+    return FAQListResponse(faqs=[
+        FAQItem(faq_id=f.faq_id, question=f.question, answer=f.answer,
+                tags=f.tags, created_at=f.created_at)
+        for f in engine.list_faqs(tenant=tenant)
+    ])
+
+
+@router.delete("/v1/faqs/{faq_id}", tags=["faq"])
+def delete_faq(
+    faq_id: str,
+    tenant: str = Depends(require_tenant),
+    engine: RagEngine = Depends(get_engine),
+) -> dict[str, object]:
+    return {"faq_id": faq_id, "deleted": engine.delete_faq(tenant=tenant, faq_id=faq_id)}
+
+
+@router.post("/v1/faq/ask", response_model=FAQAskResponse, tags=["faq"])
+def faq_ask(
+    body: FAQAskRequest,
+    tenant: str = Depends(require_tenant),
+    engine: RagEngine = Depends(get_engine),
+) -> FAQAskResponse:
+    """Context-aware FAQ answer: FAQ-first, RAG fallback, with user memory."""
+    r = engine.faq_bot.ask(
+        tenant=tenant, message=body.message, user_id=body.user_id,
+        session_id=body.session_id, top_k=body.top_k, filters=body.filters,
+    )
+    return FAQAskResponse(
+        session_id=r.session_id, user_id=r.user_id, source=r.source, answer=r.answer,
+        standalone_question=r.standalone_question, citations=r.citations,
+        memories_used=r.memories_used, faq_id=r.faq_id, faq_question=r.faq_question,
+        score=r.score, model=r.model,
+    )
+
+
+@router.get("/v1/memory/{user_id}", response_model=MemoryListResponse, tags=["faq"])
+def get_memory(
+    user_id: str,
+    tenant: str = Depends(require_tenant),
+    engine: RagEngine = Depends(get_engine),
+) -> MemoryListResponse:
+    return MemoryListResponse(
+        tenant=tenant, user_id=user_id,
+        memories=[
+            MemoryItem(memory_id=m.memory_id, kind=m.kind, content=m.content,
+                       created_at=m.created_at, last_seen=m.last_seen)
+            for m in engine.memory.list(tenant, user_id)
+        ],
+    )
+
+
+@router.delete("/v1/memory/{user_id}", tags=["faq"])
+def forget_memory(
+    user_id: str,
+    tenant: str = Depends(require_tenant),
+    engine: RagEngine = Depends(get_engine),
+) -> dict[str, object]:
+    return {"user_id": user_id, "forgotten": engine.memory.forget_user(tenant, user_id)}
 
 
 @router.post("/v1/dialogue", response_model=DialogueResponse, tags=["dialogue"])

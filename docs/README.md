@@ -19,6 +19,7 @@ RAG document Q&A system. Each stage links to the code that implements it.
 | 12 | [Multi-turn chat](12-multi-turn-chat.md) | **Conversational RAG** with context tracking + condensing |
 | 13 | [Voice session state machine](13-voice-session-state-machine.md) | **Voice assistant FSM**: listening/thinking/speaking, barge-in |
 | 14 | [Dialogue manager](14-dialogue-manager.md) | **Intent classification + persistence**, policy routing |
+| 15 | [FAQ bot with memory](15-faq-bot-memory.md) | **Context-aware FAQ bot**, curated-first + cross-session memory |
 
 > Throughout, code references use the `path:symbol` form, e.g.
 > `app/core/ingest.py:IngestionPipeline.ingest_document`.

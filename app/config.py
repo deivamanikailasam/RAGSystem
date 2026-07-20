@@ -108,6 +108,13 @@ class Settings(BaseSettings):
     # (safer default for a documentation assistant).
     intent_confidence_threshold: float = 0.5
 
+    # --- FAQ bot + memory (see docs/15-faq-bot-memory.md) -----------------
+    # Combined semantic+lexical score above which a curated FAQ answer is used
+    # instead of falling back to RAG over documents.
+    faq_match_threshold: float = 0.45
+    memory_enabled: bool = True
+    memory_recall_limit: int = 5
+
     # --- Server -----------------------------------------------------------
     log_level: str = "INFO"
 

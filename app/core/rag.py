@@ -27,6 +27,9 @@ from app.core.conversation import ConversationStore
 from app.core.dialogue import DialogueManager
 from app.core.dialogue_store import DialogueStore
 from app.core.docstore import DocStore
+from app.core.faq import FAQMatcher, FAQStore
+from app.core.faqbot import FAQBot
+from app.core.memory import MemoryStore
 from app.core.embeddings import build_embedding_provider
 from app.core.generator import build_generator
 from app.core.ingest import IngestedDocResult, IngestionPipeline
@@ -80,6 +83,10 @@ class RagEngine:
             build_intent_classifier(settings),
             settings,
         )
+        self.faqs = FAQStore(settings.data_dir / "faqs.db")
+        self.faq_matcher = FAQMatcher(self.embeddings, self.faqs)
+        self.memory = MemoryStore(settings.data_dir / "memory.db")
+        self.faq_bot = FAQBot(self, self.faq_matcher, self.memory, settings)
 
         if not settings.is_single_tenant:
             self._seed_static_tenants()
@@ -313,6 +320,21 @@ class RagEngine:
             request_id=request_id,
         )
 
+    # -- FAQ management (keeps the matcher cache in sync) ------------------- #
+    def add_faq(self, *, tenant: str, question: str, answer: str,
+                tags: list[str] | None = None, faq_id: str | None = None):
+        faq = self.faqs.add(tenant, question, answer, tags, faq_id)
+        self.faq_matcher.invalidate(tenant)
+        return faq
+
+    def list_faqs(self, *, tenant: str):
+        return self.faqs.list(tenant)
+
+    def delete_faq(self, *, tenant: str, faq_id: str) -> bool:
+        removed = self.faqs.delete(tenant, faq_id)
+        self.faq_matcher.invalidate(tenant)
+        return removed
+
     def get_conversation(self, *, tenant: str, session_id: str):
         """Return the full message history for a session (empty if unknown)."""
         return self.conversations.get_messages(tenant, session_id)
@@ -336,6 +358,9 @@ class RagEngine:
         self.conversations.delete_tenant(tenant)
         self.voice._store.delete_tenant(tenant)  # noqa: SLF001
         self.dialogue._store.delete_tenant(tenant)  # noqa: SLF001
+        self.faqs.delete_tenant(tenant)
+        self.faq_matcher.invalidate(tenant)
+        self.memory.delete_tenant(tenant)
 
     def tenant_stats(self, tenant: str) -> dict[str, object]:
         """Runtime stats for the current tenant (used by GET /v1/me)."""

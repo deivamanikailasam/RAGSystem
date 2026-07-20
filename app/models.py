@@ -178,6 +178,67 @@ class VoiceEventResponse(BaseModel):
     standalone_question: str | None = None
 
 
+# --------------------------------------------------------------------------- #
+# Context-aware FAQ bot with memory
+# --------------------------------------------------------------------------- #
+class FAQCreate(BaseModel):
+    question: str = Field(..., min_length=1)
+    answer: str = Field(..., min_length=1)
+    tags: list[str] = Field(default_factory=list)
+    faq_id: str | None = None
+
+
+class FAQItem(BaseModel):
+    faq_id: str
+    question: str
+    answer: str
+    tags: list[str] = Field(default_factory=list)
+    created_at: float
+
+
+class FAQListResponse(BaseModel):
+    faqs: list[FAQItem]
+
+
+class FAQAskRequest(BaseModel):
+    message: str = Field(..., min_length=1)
+    user_id: str | None = Field(
+        default=None,
+        description="Stable id for cross-session memory. Defaults to the session.",
+    )
+    session_id: str | None = None
+    top_k: int | None = None
+    filters: dict[str, str] = Field(default_factory=dict)
+
+
+class FAQAskResponse(BaseModel):
+    session_id: str
+    user_id: str
+    source: str = Field(..., description="'faq' (curated), 'rag', or 'fallback'.")
+    answer: str
+    standalone_question: str
+    citations: list[dict] = Field(default_factory=list)
+    memories_used: list[str] = Field(default_factory=list)
+    faq_id: str | None = None
+    faq_question: str | None = None
+    score: float | None = None
+    model: str | None = None
+
+
+class MemoryItem(BaseModel):
+    memory_id: str
+    kind: str
+    content: str
+    created_at: float
+    last_seen: float
+
+
+class MemoryListResponse(BaseModel):
+    tenant: str
+    user_id: str
+    memories: list[MemoryItem]
+
+
 class DialogueRequest(BaseModel):
     message: str = Field(..., min_length=1)
     session_id: str | None = Field(
