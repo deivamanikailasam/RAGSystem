@@ -30,7 +30,8 @@
 |-------|----------------|------|
 | Ingestion | fetch, parse, chunk, version | `core/ingest.py`, `core/chunking.py` |
 | Embedding & indexing | embed, build/persist FAISS, store metadata | `core/embeddings.py`, `core/vector_store.py`, `core/docstore.py` |
-| Retrieval | similarity search + filter + rerank | `core/retriever.py` |
+| Retrieval (stage 1) | vector / bm25 / hybrid search + fusion + filter | `core/retriever.py`, `core/bm25.py`, `core/fusion.py` |
+| Reranking (stage 2) | re-score candidates jointly with the query | `core/reranker.py` |
 | Generation | prompt assembly, LLM call, formatting | `core/generator.py` |
 | Serving/API | HTTP endpoints, auth, rate limiting | `api/routes.py`, `deps.py` |
 | Observability | logs, metrics, traces, evals | `observability/metrics.py` |
@@ -49,10 +50,15 @@ document ──▶ parse to text ──▶ chunk (overlap) ──▶ embed (batc
 **Query (read path)**
 
 ```
-question ──▶ embed ──▶ FAISS top-k ──▶ hydrate metadata (SQLite)
-         ──▶ filter by metadata ──▶ (optional) rerank ──▶ cap to N
+question ──┬─▶ embed ──▶ FAISS search ──┐
+           └─▶ BM25 search ─────────────┴─▶ fuse (RRF/weighted)   [stage 1]
+         ──▶ hydrate metadata (SQLite) ──▶ filter by metadata
+         ──▶ rerank candidates ──▶ cap to top_k                   [stage 2]
          ──▶ assemble prompt ──▶ LLM ──▶ answer + citations
 ```
+
+Retrieval modes are detailed in [doc 9](09-hybrid-retrieval.md); reranking in
+[doc 8](08-reranking.md).
 
 Both paths are implemented in `app/core/rag.py:RagEngine`.
 

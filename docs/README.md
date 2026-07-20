@@ -13,6 +13,7 @@ RAG document Q&A system. Each stage links to the code that implements it.
 | 6 | [Scaling & evolution](06-scaling-and-evolution.md) | FAISS scaling, caching, multi-tenancy, roadmap |
 | 7 | [Deployment modes](07-deployment-modes.md) | **Single-tenant vs multi-tenant**, step by step |
 | 8 | [Reranking stage](08-reranking.md) | **Two-stage retrieve-then-rerank**, strategies, tuning |
+| 9 | [Hybrid retrieval](09-hybrid-retrieval.md) | **BM25 + vector search** fused (RRF / weighted) |
 
 > Throughout, code references use the `path:symbol` form, e.g.
 > `app/core/ingest.py:IngestionPipeline.ingest_document`.

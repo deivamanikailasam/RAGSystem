@@ -75,8 +75,9 @@ docker compose up --build
                                         │    docstore       │
                                         └────────┬─────────┘
                                                  │
-   user query ──▶ /v1/query ──▶ embed ──▶ FAISS top-N ──▶ filter
-                                                 │  (stage 1: recall)
+   user query ──▶ /v1/query ──┬─ dense: embed → FAISS ─┐
+                              └─ sparse: BM25 ─────────┴─▶ fuse (RRF/weighted)
+                                                 │  (stage 1: hybrid retrieval)
                                                  ▼
                                         rerank N ──▶ top-k
                                         (stage 2: precision;
@@ -153,7 +154,9 @@ app/
     docstore.py        # SQLite metadata store
     tenants.py         # tenant registry: config, quotas, issued keys (multi-tenant)
     ingest.py          # ingestion pipeline (parse → chunk → embed → index)
-    retriever.py       # stage 1: similarity search + metadata filter (candidates)
+    retriever.py       # stage 1: vector | bm25 | hybrid retrieval + fusion
+    bm25.py            # sparse BM25 inverted index (per tenant)
+    fusion.py          # RRF + weighted fusion of dense & sparse results
     reranker.py        # stage 2: none/lexical(BM25)/cross-encoder/llm rerankers
     generator.py       # prompt assembly + LLM call + fallback
     rag.py             # end-to-end orchestration + per-tenant policy/quotas
@@ -186,6 +189,8 @@ All configuration is environment-driven (12-factor). See
 | `CHUNK_TOKENS`           | `400`              | Target chunk size                    |
 | `CHUNK_OVERLAP`          | `60`               | Overlap between chunks               |
 | `RETRIEVAL_TOP_K`        | `6`                | Chunks kept for the answer           |
+| `RETRIEVAL_MODE`         | `hybrid`           | `vector`/`bm25`/`hybrid`             |
+| `HYBRID_FUSION`          | `rrf`              | `rrf` or `weighted`                  |
 | `RERANK_STRATEGY`        | `lexical`          | `none`/`lexical`/`cross_encoder`/`llm` |
 | `RERANK_CANDIDATES`      | `20`               | Candidate pool size before reranking |
 | `DATA_DIR`               | `./data`           | Where indices + docstore live        |
@@ -197,7 +202,8 @@ All configuration is environment-driven (12-factor). See
 ```bash
 pytest -q                        # unit + API tests (no API key required)
 python eval/run_eval.py          # retrieval + answer-quality metrics
-python scripts/compare_rerank.py # compare reranking strategies side by side
+python scripts/compare_rerank.py    # compare reranking strategies side by side
+python scripts/compare_retrieval.py # compare vector / bm25 / hybrid modes
 ```
 
 ---
@@ -215,6 +221,7 @@ brief, each with step-by-step instructions and pointers to the implementing code
 6. [Scaling & evolution](docs/06-scaling-and-evolution.md)
 7. [Deployment modes: single-tenant vs multi-tenant](docs/07-deployment-modes.md)
 8. [Reranking stage: two-stage retrieve-then-rerank](docs/08-reranking.md)
+9. [Hybrid retrieval: BM25 + vector search](docs/09-hybrid-retrieval.md)
 
 ---
 

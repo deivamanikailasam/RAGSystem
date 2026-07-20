@@ -34,6 +34,16 @@ class Settings(BaseSettings):
     retrieval_top_k: int = 6
     min_score: float = 0.0
 
+    # Retrieval mode (stage 1; see docs/09-hybrid-retrieval.md):
+    #   "vector" — dense FAISS only
+    #   "bm25"   — sparse BM25 only
+    #   "hybrid" — run both and fuse (default)
+    retrieval_mode: str = "hybrid"
+    # Fusion for hybrid mode: "rrf" (rank-based, scale-free) or "weighted".
+    hybrid_fusion: str = "rrf"
+    rrf_k: int = 60          # RRF damping constant
+    hybrid_alpha: float = 0.5  # dense weight in weighted fusion (1-alpha = sparse)
+
     # --- Reranking (second stage; see docs/08-reranking.md) ---------------
     # Strategy: "none" | "lexical" | "cross_encoder" | "llm".
     rerank_strategy: str = "lexical"

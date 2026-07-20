@@ -55,7 +55,13 @@ class Citation(BaseModel):
     doc_id: str
     source: str
     chunk_index: int
-    score: float = Field(..., description="Raw vector similarity (stage 1).")
+    score: float = Field(..., description="Stage-1 primary score (fused in hybrid).")
+    vector_score: float | None = Field(
+        default=None, description="Dense cosine similarity, if vector search ran."
+    )
+    bm25_score: float | None = Field(
+        default=None, description="Sparse BM25 score, if BM25 search ran."
+    )
     rerank_score: float | None = Field(
         default=None, description="Reranker relevance score (stage 2), if reranked."
     )
@@ -66,6 +72,9 @@ class QueryResponse(BaseModel):
     answer: str
     citations: list[Citation]
     model: str
+    retrieval_mode: str = Field(
+        default="vector", description="Stage-1 mode: vector | bm25 | hybrid."
+    )
     reranker: str = Field(default="none", description="Reranking strategy used.")
     retrieval_ms: float
     rerank_ms: float = 0.0

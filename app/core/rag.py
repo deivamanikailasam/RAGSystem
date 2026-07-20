@@ -21,6 +21,7 @@ import time
 import uuid
 
 from app.config import Settings
+from app.core.bm25 import BM25Store
 from app.core.docstore import DocStore
 from app.core.embeddings import build_embedding_provider
 from app.core.generator import build_generator
@@ -45,6 +46,7 @@ class RagEngine:
             nprobe=settings.ivf_nprobe,
         )
         self.docstore = DocStore(settings.data_dir / "docstore.db")
+        self.bm25 = BM25Store(self.docstore)
         self.tenants = TenantRegistry(
             settings.data_dir / "tenants.db",
             default_index_type=settings.faiss_index_type,
@@ -53,7 +55,7 @@ class RagEngine:
             settings, self.embeddings, self.vector_store, self.docstore
         )
         self.retriever = Retriever(
-            settings, self.embeddings, self.vector_store, self.docstore
+            settings, self.embeddings, self.vector_store, self.docstore, self.bm25
         )
         self.reranker = build_reranker(settings)
         self.generator = build_generator(settings)
@@ -101,6 +103,9 @@ class RagEngine:
                 tenant=tenant, text=text, source=source,
                 doc_id=doc_id, metadata=metadata,
             )
+        # Corpus changed → rebuild this tenant's BM25 index on next query.
+        if not result.skipped:
+            self.bm25.invalidate(tenant)
         METRICS.increment("documents_ingested")
         METRICS.increment("chunks_ingested", result.chunks)
         return result
@@ -166,6 +171,12 @@ class RagEngine:
                 source=ch.record.source,
                 chunk_index=ch.record.chunk_index,
                 score=round(ch.score, 4),
+                vector_score=(
+                    round(ch.vector_score, 4) if ch.vector_score is not None else None
+                ),
+                bm25_score=(
+                    round(ch.bm25_score, 4) if ch.bm25_score is not None else None
+                ),
                 rerank_score=(
                     round(ch.rerank_score, 4) if ch.rerank_score is not None else None
                 ),
@@ -178,6 +189,7 @@ class RagEngine:
             answer=generation.answer,
             citations=citations,
             model=generation.model,
+            retrieval_mode=self._settings.retrieval_mode,
             reranker=self.reranker.name,
             retrieval_ms=round(retrieval_ms, 2),
             rerank_ms=round(rerank_ms, 2),
@@ -188,6 +200,7 @@ class RagEngine:
 
     def delete_document(self, *, tenant: str, doc_id: str) -> int:
         removed = self.ingestion.delete_document(tenant=tenant, doc_id=doc_id)
+        self.bm25.invalidate(tenant)
         METRICS.increment("documents_deleted")
         return removed
 
@@ -195,6 +208,7 @@ class RagEngine:
         """Delete all of a tenant's data: vectors + metadata (not the registry row)."""
         self.docstore.delete_tenant(tenant)
         self.vector_store.drop_tenant(tenant)
+        self.bm25.invalidate(tenant)
 
     def tenant_stats(self, tenant: str) -> dict[str, object]:
         """Runtime stats for the current tenant (used by GET /v1/me)."""

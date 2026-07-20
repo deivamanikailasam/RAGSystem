@@ -168,6 +168,14 @@ class DocStore:
             )
             return [int(row["vector_id"]) for row in cur.fetchall()]
 
+    def all_chunks(self, tenant: str) -> list[ChunkRecord]:
+        """Return every chunk for a tenant (used to build the BM25 index)."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM chunks WHERE tenant=? ORDER BY vector_id", (tenant,)
+            ).fetchall()
+        return [self._row_to_record(row) for row in rows]
+
     def count_documents(self, tenant: str) -> int:
         with self._lock:
             cur = self._conn.execute(

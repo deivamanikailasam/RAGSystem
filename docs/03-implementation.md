@@ -80,16 +80,21 @@ and generator.
 `app/deps.py:require_tenant` turns the `Authorization: Bearer <key>` header into
 a tenant id. All subsequent work is scoped to that tenant.
 
-### Step 2 — Embed the query & search
-`app/core/retriever.py:Retriever.retrieve` embeds the question with the *same*
-provider used at ingest time and runs top-k search in the tenant's FAISS index.
-When metadata filters are present we over-fetch (`k × 4`) so filtering still
-leaves enough candidates.
+### Step 2 — Retrieve a candidate pool (dense, sparse, or hybrid)
+`app/core/retriever.py:Retriever.retrieve` fetches candidates according to
+`RETRIEVAL_MODE`: dense FAISS (`vector`), sparse BM25 (`bm25`), or **both fused**
+(`hybrid`, the default). The query is embedded with the *same* provider used at
+ingest time. When metadata filters are present we over-fetch (`× 4`) so filtering
+still leaves enough candidates.
 
 ```python
-query_vec = self._embeddings.embed([question])[0]
-hits = self._store.for_tenant(tenant).search(query_vec, fetch_k)
+dense  = self._vector_search(tenant, question, fetch_n)   # FAISS cosine
+sparse = self._bm25_search(tenant, question, fetch_n)      # BM25 over corpus
+fused  = self._fuse(mode, dense, sparse)                   # RRF / weighted
 ```
+
+Hybrid retrieval unions semantic recall with exact-keyword precision — see
+**[docs/09-hybrid-retrieval.md](09-hybrid-retrieval.md)** for the deep dive.
 
 ### Step 3 — Hydrate & filter
 FAISS returns `(vector_id, score)` pairs. We hydrate them into full chunk
