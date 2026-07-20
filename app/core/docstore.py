@@ -168,6 +168,23 @@ class DocStore:
             )
             return [int(row["vector_id"]) for row in cur.fetchall()]
 
+    def count_documents(self, tenant: str) -> int:
+        with self._lock:
+            cur = self._conn.execute(
+                "SELECT COUNT(*) AS c FROM documents WHERE tenant=?", (tenant,)
+            )
+            return int(cur.fetchone()["c"])
+
+    def delete_tenant(self, tenant: str) -> int:
+        """Remove all documents and chunks for a tenant (used when purging)."""
+        with self._lock:
+            cur = self._conn.execute(
+                "DELETE FROM chunks WHERE tenant=?", (tenant,)
+            )
+            self._conn.execute("DELETE FROM documents WHERE tenant=?", (tenant,))
+            self._conn.commit()
+            return cur.rowcount
+
     def delete_doc_chunks(self, tenant: str, doc_id: str) -> int:
         with self._lock:
             cur = self._conn.execute(

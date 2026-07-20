@@ -41,7 +41,11 @@ def build_context_block(chunks: list[RetrievedChunk]) -> str:
     return "\n\n".join(parts)
 
 
-def build_messages(question: str, chunks: list[RetrievedChunk]) -> list[dict[str, str]]:
+def build_messages(
+    question: str,
+    chunks: list[RetrievedChunk],
+    system_prompt: str | None = None,
+) -> list[dict[str, str]]:
     context = build_context_block(chunks)
     user = (
         f"Context passages:\n{context}\n\n"
@@ -49,7 +53,7 @@ def build_messages(question: str, chunks: list[RetrievedChunk]) -> list[dict[str
         "Answer using only the context above and cite passage numbers."
     )
     return [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": system_prompt or SYSTEM_PROMPT},
         {"role": "user", "content": user},
     ]
 
@@ -59,7 +63,15 @@ class ExtractiveGenerator:
 
     model = "local-extractive"
 
-    def generate(self, question: str, chunks: list[RetrievedChunk]) -> Generation:
+    def generate(
+        self,
+        question: str,
+        chunks: list[RetrievedChunk],
+        system_prompt: str | None = None,
+    ) -> Generation:
+        # The extractive fallback ignores the prompt template (it does not call
+        # an LLM), but accepts the argument to share the generator interface.
+        _ = system_prompt
         if not chunks:
             return Generation(
                 answer="I don't know based on the available documents.",
@@ -86,14 +98,19 @@ class OpenAIGenerator:
         self.model = settings.generation_model
         self._temperature = settings.generation_temperature
 
-    def generate(self, question: str, chunks: list[RetrievedChunk]) -> Generation:
+    def generate(
+        self,
+        question: str,
+        chunks: list[RetrievedChunk],
+        system_prompt: str | None = None,
+    ) -> Generation:
         if not chunks:
             return Generation(
                 answer="I don't know based on the available documents.",
                 model=self.model,
                 tokens={},
             )
-        messages = build_messages(question, chunks)
+        messages = build_messages(question, chunks, system_prompt)
         resp = self._client.chat.completions.create(
             model=self.model,
             messages=messages,

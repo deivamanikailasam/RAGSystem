@@ -1,9 +1,18 @@
 """RagEngine — composes every component into one process-wide service.
 
 This is the object the API layer talks to. It owns the embedding provider,
-FAISS vector store, SQLite docstore, ingestion pipeline, retriever, and
-generator, and exposes three high-level operations: ``ingest``, ``query``,
-and ``delete_document``.
+FAISS vector store, SQLite docstore, tenant registry, ingestion pipeline,
+retriever, and generator.
+
+Deployment modes (see docs/07-deployment-modes.md):
+
+* **single_tenant** — one implicit corpus (``settings.single_tenant_id``). The
+  registry is bypassed; per-tenant config falls back to global defaults and no
+  quotas apply. Simplest possible internal doc bot.
+* **multi_tenant** — the registry is the source of truth. Every operation
+  resolves the tenant's per-tenant policy (prompt template, index type) and
+  enforces its quotas (max documents, max queries/day). Tenants referenced by
+  static ``API_KEYS`` are auto-seeded at startup so they work out of the box.
 """
 
 from __future__ import annotations
@@ -17,6 +26,7 @@ from app.core.embeddings import build_embedding_provider
 from app.core.generator import build_generator
 from app.core.ingest import IngestedDocResult, IngestionPipeline
 from app.core.retriever import Retriever
+from app.core.tenants import QuotaExceeded, Tenant, TenantRegistry
 from app.core.vector_store import VectorStore
 from app.models import Citation, QueryResponse
 from app.observability.metrics import METRICS
@@ -34,6 +44,10 @@ class RagEngine:
             nprobe=settings.ivf_nprobe,
         )
         self.docstore = DocStore(settings.data_dir / "docstore.db")
+        self.tenants = TenantRegistry(
+            settings.data_dir / "tenants.db",
+            default_index_type=settings.faiss_index_type,
+        )
         self.ingestion = IngestionPipeline(
             settings, self.embeddings, self.vector_store, self.docstore
         )
@@ -41,6 +55,21 @@ class RagEngine:
             settings, self.embeddings, self.vector_store, self.docstore
         )
         self.generator = build_generator(settings)
+
+        if not settings.is_single_tenant:
+            self._seed_static_tenants()
+
+    def _seed_static_tenants(self) -> None:
+        """Ensure tenants referenced by static API_KEYS exist in the registry."""
+        for tenant_id in set(self._settings.api_key_map.values()):
+            self.tenants.ensure(tenant_id)
+
+    # -- per-tenant config resolution -------------------------------------- #
+    def _tenant_config(self, tenant: str) -> Tenant | None:
+        """Registry record for a tenant, or None in single-tenant mode."""
+        if self._settings.is_single_tenant:
+            return None
+        return self.tenants.get(tenant)
 
     # -- operations -------------------------------------------------------- #
     def ingest(
@@ -52,6 +81,19 @@ class RagEngine:
         doc_id: str | None = None,
         metadata: dict[str, str] | None = None,
     ) -> IngestedDocResult:
+        cfg = self._tenant_config(tenant)
+
+        # Warm the index with the tenant's configured type before the pipeline
+        # touches it (first-touch fixes the type for new indices).
+        index_type = cfg.index_type if cfg else self._settings.faiss_index_type
+        self.vector_store.for_tenant(tenant, index_type=index_type)
+
+        # Enforce the document quota (only counts genuinely new documents).
+        if cfg and cfg.max_documents > 0:
+            existing = self.docstore.get_document(tenant, doc_id) if doc_id else None
+            if existing is None and self.docstore.count_documents(tenant) >= cfg.max_documents:
+                raise QuotaExceeded("max_documents", cfg.max_documents)
+
         with METRICS.timer("ingest_ms"):
             result = self.ingestion.ingest_document(
                 tenant=tenant, text=text, source=source,
@@ -70,6 +112,15 @@ class RagEngine:
         filters: dict[str, str] | None = None,
     ) -> QueryResponse:
         request_id = uuid.uuid4().hex
+        cfg = self._tenant_config(tenant)
+
+        # Enforce and record the per-day query quota.
+        if cfg and cfg.max_queries_per_day > 0:
+            if self.tenants.queries_today(tenant) >= cfg.max_queries_per_day:
+                raise QuotaExceeded("max_queries_per_day", cfg.max_queries_per_day)
+        if cfg:
+            self.tenants.record_query(tenant)
+
         METRICS.increment("queries")
 
         t0 = time.perf_counter()
@@ -82,8 +133,10 @@ class RagEngine:
         # Cap context passed to the model regardless of retrieval depth.
         chunks = chunks[: self._settings.max_context_chunks]
 
+        system_prompt = cfg.prompt_template if cfg else None
+
         t1 = time.perf_counter()
-        generation = self.generator.generate(question, chunks)
+        generation = self.generator.generate(question, chunks, system_prompt)
         generation_ms = (time.perf_counter() - t1) * 1000
         METRICS.observe("generation_ms", generation_ms)
 
@@ -115,6 +168,26 @@ class RagEngine:
         removed = self.ingestion.delete_document(tenant=tenant, doc_id=doc_id)
         METRICS.increment("documents_deleted")
         return removed
+
+    def purge_tenant(self, tenant: str) -> None:
+        """Delete all of a tenant's data: vectors + metadata (not the registry row)."""
+        self.docstore.delete_tenant(tenant)
+        self.vector_store.drop_tenant(tenant)
+
+    def tenant_stats(self, tenant: str) -> dict[str, object]:
+        """Runtime stats for the current tenant (used by GET /v1/me)."""
+        cfg = self._tenant_config(tenant)
+        return {
+            "tenant": tenant,
+            "mode": self._settings.deployment_mode,
+            "documents": self.docstore.count_documents(tenant),
+            "vectors": self.vector_store.for_tenant(tenant).ntotal,
+            "queries_today": self.tenants.queries_today(tenant) if cfg else 0,
+            "quotas": {
+                "max_documents": cfg.max_documents if cfg else 0,
+                "max_queries_per_day": cfg.max_queries_per_day if cfg else 0,
+            },
+        }
 
 
 def _snippet(text: str, limit: int = 240) -> str:

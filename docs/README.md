@@ -11,6 +11,7 @@ RAG document Q&A system. Each stage links to the code that implements it.
 | 4 | [Deployment & ops](04-deployment-and-ops.md) | Packaging, config, auth, secrets, error handling |
 | 5 | [Evaluation & monitoring](05-evaluation-and-monitoring.md) | Offline/online evals, metrics, index maintenance |
 | 6 | [Scaling & evolution](06-scaling-and-evolution.md) | FAISS scaling, caching, multi-tenancy, roadmap |
+| 7 | [Deployment modes](07-deployment-modes.md) | **Single-tenant vs multi-tenant**, step by step |
 
 > Throughout, code references use the `path:symbol` form, e.g.
 > `app/core/ingest.py:IngestionPipeline.ingest_document`.

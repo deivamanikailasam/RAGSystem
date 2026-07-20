@@ -139,16 +139,34 @@ class VectorStore:
     def _tenant_path(self, tenant: str) -> Path:
         return self._data_dir / "tenants" / tenant / "index.faiss"
 
-    def for_tenant(self, tenant: str) -> TenantIndex:
+    def for_tenant(self, tenant: str, index_type: str | None = None) -> TenantIndex:
+        """Return (and cache) the tenant's index.
+
+        ``index_type`` overrides the global default the first time a tenant's
+        index is created (e.g. a large tenant on ``ivf`` while others stay
+        ``flat``). It is fixed thereafter — the on-disk index already exists.
+        """
         with self._cache_lock:
             idx = self._cache.get(tenant)
             if idx is None:
                 idx = TenantIndex(
                     self._tenant_path(tenant),
                     self._dimension,
-                    self._index_type,
+                    index_type or self._index_type,
                     self._nlist,
                     self._nprobe,
                 )
                 self._cache[tenant] = idx
             return idx
+
+    def drop_tenant(self, tenant: str) -> None:
+        """Evict from cache and delete the tenant's on-disk index file."""
+        with self._cache_lock:
+            self._cache.pop(tenant, None)
+        path = self._tenant_path(tenant)
+        if path.exists():
+            path.unlink()
+        # Best-effort cleanup of the now-empty tenant directory.
+        parent = path.parent
+        if parent.exists() and not any(parent.iterdir()):
+            parent.rmdir()

@@ -21,6 +21,7 @@ from app.models import (
     IngestResponse,
     QueryRequest,
     QueryResponse,
+    TenantStats,
 )
 from app.observability.metrics import METRICS
 
@@ -29,11 +30,22 @@ router = APIRouter()
 
 @router.get("/health", response_model=HealthResponse, tags=["ops"])
 def health(engine: RagEngine = Depends(get_engine)) -> HealthResponse:
+    settings = engine._settings  # noqa: SLF001 (read-only)
     return HealthResponse(
         status="ok",
         version=__version__,
-        openai_enabled=engine._settings.use_openai,  # noqa: SLF001 (read-only)
+        openai_enabled=settings.use_openai,
+        deployment_mode=settings.deployment_mode,
     )
+
+
+@router.get("/v1/me", response_model=TenantStats, tags=["ops"])
+def whoami(
+    tenant: str = Depends(require_tenant),
+    engine: RagEngine = Depends(get_engine),
+) -> TenantStats:
+    """Return the calling tenant's id, mode, usage, and quotas."""
+    return TenantStats(**engine.tenant_stats(tenant))
 
 
 @router.get("/metrics", tags=["ops"])

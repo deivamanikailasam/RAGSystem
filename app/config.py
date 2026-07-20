@@ -43,6 +43,22 @@ class Settings(BaseSettings):
     # --- Storage ----------------------------------------------------------
     data_dir: Path = Path("./data")
 
+    # --- Deployment mode --------------------------------------------------
+    # "single_tenant" — one implicit corpus, minimal/optional auth. Ideal for
+    #                   an internal doc bot on a limited corpus.
+    # "multi_tenant"  — a platform: per-tenant FAISS indices, a tenant registry,
+    #                   an admin control plane, per-tenant config + quotas.
+    # See docs/07-deployment-modes.md.
+    deployment_mode: str = "multi_tenant"
+
+    # Single-tenant knobs (ignored in multi-tenant mode).
+    single_tenant_id: str = "default"
+    single_tenant_require_auth: bool = False
+
+    # Multi-tenant control plane: the admin key guards /admin/* tenant
+    # management. Leave unset to disable the admin API entirely.
+    admin_api_key: str | None = None
+
     # --- Auth -------------------------------------------------------------
     # Static "key:tenant" pairs for local/dev. Swap for a real IdP + secrets
     # manager in production (see docs/04-deployment-and-ops.md).
@@ -54,6 +70,10 @@ class Settings(BaseSettings):
 
     # --- Server -----------------------------------------------------------
     log_level: str = "INFO"
+
+    @property
+    def is_single_tenant(self) -> bool:
+        return self.deployment_mode == "single_tenant"
 
     @property
     def use_openai(self) -> bool:

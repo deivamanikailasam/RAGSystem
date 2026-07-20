@@ -89,19 +89,47 @@ Every layer is covered in depth in [`docs/`](docs/).
 
 ---
 
+## Deployment modes
+
+QASystem runs in either of two modes, chosen with a single env var
+`DEPLOYMENT_MODE` — see [`docs/07-deployment-modes.md`](docs/07-deployment-modes.md)
+for the full step-by-step guide.
+
+| | **single_tenant** | **multi_tenant** (default) |
+|---|---|---|
+| Corpus | one implicit corpus | one FAISS index per tenant |
+| Auth | optional (open or one key) | required; per-tenant keys |
+| Control plane | — | `/admin/*` tenant lifecycle |
+| Per-tenant prompt / index / quotas | — | yes |
+| Best for | internal doc bot, limited corpus | SaaS / many teams |
+
+```bash
+# Single-tenant internal doc QA:
+DEPLOYMENT_MODE=single_tenant SINGLE_TENANT_ID=internal uvicorn app.main:app
+
+# Multi-tenant platform:
+DEPLOYMENT_MODE=multi_tenant ADMIN_API_KEY=secret uvicorn app.main:app
+```
+
 ## API
 
-| Method | Path             | Description                                   |
-|--------|------------------|-----------------------------------------------|
-| GET    | `/health`        | Liveness/readiness probe                      |
-| GET    | `/metrics`       | In-process counters & latency histograms      |
-| POST   | `/v1/ingest`     | Ingest raw text or uploaded files             |
-| POST   | `/v1/query`      | Ask a question (RAG)                          |
-| DELETE | `/v1/documents/{doc_id}` | Remove a document and its vectors     |
+| Method | Path             | Description                                   | Auth |
+|--------|------------------|-----------------------------------------------|------|
+| GET    | `/health`        | Liveness/readiness probe                      | none |
+| GET    | `/metrics`       | In-process counters & latency histograms      | none |
+| GET    | `/v1/me`         | Caller's tenant, usage & quotas               | tenant |
+| POST   | `/v1/ingest`     | Ingest raw text                               | tenant |
+| POST   | `/v1/ingest/file`| Ingest an uploaded file (PDF/MD/TXT/HTML)     | tenant |
+| POST   | `/v1/query`      | Ask a question (RAG)                          | tenant |
+| DELETE | `/v1/documents/{doc_id}` | Remove a document and its vectors     | tenant |
+| POST   | `/admin/tenants` | Create a tenant (returns key once)            | admin |
+| GET    | `/admin/tenants` | List tenants                                  | admin |
+| GET/PATCH/DELETE | `/admin/tenants/{id}` | Get / update config / offboard   | admin |
 
-All `/v1/*` routes require an `Authorization: Bearer <api-key>` header. The key
-maps to a tenant, and every operation is isolated to that tenant's index and
-docstore. See [`docs/04-deployment-and-ops.md`](docs/04-deployment-and-ops.md).
+**Tenant auth**: `/v1/*` routes take `Authorization: Bearer <api-key>`; the key
+maps to a tenant and every operation is isolated to that tenant's index and
+docstore. In single-tenant mode this may be optional. **Admin auth**: `/admin/*`
+routes take the separate `ADMIN_API_KEY` (multi-tenant only).
 
 ---
 
@@ -116,13 +144,15 @@ app/
   core/
     chunking.py        # token-aware overlapping chunker
     embeddings.py      # OpenAI embeddings w/ batching + retry + local fallback
-    vector_store.py    # FAISS wrapper (Flat/IVF), persistence, delete
+    vector_store.py    # FAISS wrapper (Flat/IVF), per-tenant, persistence, delete
     docstore.py        # SQLite metadata store
+    tenants.py         # tenant registry: config, quotas, issued keys (multi-tenant)
     ingest.py          # ingestion pipeline (parse → chunk → embed → index)
     retriever.py       # similarity search + metadata filter + rerank
     generator.py       # prompt assembly + LLM call + fallback
-    rag.py             # end-to-end query orchestration
-  api/routes.py        # HTTP endpoints
+    rag.py             # end-to-end orchestration + per-tenant policy/quotas
+  api/routes.py        # tenant HTTP endpoints
+  api/admin.py         # /admin/* tenant control plane (multi-tenant)
   observability/metrics.py
 eval/                  # offline evaluation harness
 scripts/               # operational scripts
@@ -142,7 +172,11 @@ All configuration is environment-driven (12-factor). See
 | `OPENAI_API_KEY`         | *(unset)*          | Enables real OpenAI; falls back if unset |
 | `EMBEDDING_MODEL`        | `text-embedding-3-small` | Embedding model                |
 | `GENERATION_MODEL`       | `gpt-4.1-mini`     | Answer-generation model              |
-| `FAISS_INDEX_TYPE`       | `flat`             | `flat` or `ivf`                      |
+| `DEPLOYMENT_MODE`        | `multi_tenant`     | `single_tenant` or `multi_tenant`    |
+| `SINGLE_TENANT_ID`       | `default`          | Fixed tenant in single-tenant mode   |
+| `SINGLE_TENANT_REQUIRE_AUTH` | `false`        | Require a key in single-tenant mode  |
+| `ADMIN_API_KEY`          | *(unset)*          | Guards `/admin/*`; unset disables it  |
+| `FAISS_INDEX_TYPE`       | `flat`             | `flat` or `ivf` (per-tenant default) |
 | `CHUNK_TOKENS`           | `400`              | Target chunk size                    |
 | `CHUNK_OVERLAP`          | `60`               | Overlap between chunks               |
 | `RETRIEVAL_TOP_K`        | `6`                | Chunks retrieved per query           |
@@ -170,6 +204,7 @@ brief, each with step-by-step instructions and pointers to the implementing code
 4. [Deployment & ops](docs/04-deployment-and-ops.md)
 5. [Evaluation, monitoring & maintenance](docs/05-evaluation-and-monitoring.md)
 6. [Scaling & evolution](docs/06-scaling-and-evolution.md)
+7. [Deployment modes: single-tenant vs multi-tenant](docs/07-deployment-modes.md)
 
 ---
 
