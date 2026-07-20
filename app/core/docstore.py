@@ -122,6 +122,25 @@ class DocStore:
             )
             return int(cur.fetchone()["m"])
 
+    def max_vector_id_all(self) -> int:
+        """Global max vector id across all tenants.
+
+        Used to allocate globally-unique ids in shared-namespace isolation,
+        where every tenant's vectors live in one index and ids must not collide.
+        """
+        with self._lock:
+            cur = self._conn.execute(
+                "SELECT COALESCE(MAX(vector_id), -1) AS m FROM chunks"
+            )
+            return int(cur.fetchone()["m"])
+
+    def vector_ids_for_tenant(self, tenant: str) -> list[int]:
+        with self._lock:
+            cur = self._conn.execute(
+                "SELECT vector_id FROM chunks WHERE tenant=?", (tenant,)
+            )
+            return [int(row["vector_id"]) for row in cur.fetchall()]
+
     def add_chunks(self, records: list[ChunkRecord]) -> None:
         if not records:
             return

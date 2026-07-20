@@ -94,7 +94,12 @@ class IngestionPipeline:
 
         vectors = self._embeddings.embed([c.text for c in chunks])
 
-        base_id = self._docs.max_vector_id(tenant) + 1
+        # In shared-namespace isolation every tenant's vectors share one index,
+        # so ids must be globally unique; otherwise per-tenant ids suffice.
+        if self._settings.tenant_isolation == "shared_namespace":
+            base_id = self._docs.max_vector_id_all() + 1
+        else:
+            base_id = self._docs.max_vector_id(tenant) + 1
         vector_ids = np.arange(base_id, base_id + len(chunks), dtype=np.int64)
 
         records = [

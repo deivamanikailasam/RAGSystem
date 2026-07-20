@@ -81,6 +81,12 @@ class Settings(BaseSettings):
     # management. Leave unset to disable the admin API entirely.
     admin_api_key: str | None = None
 
+    # Tenant isolation strategy (multi-tenant; see docs/10-tenant-isolation.md):
+    #   "index_per_tenant" — one FAISS index file per tenant (physical, default)
+    #   "shared_namespace" — one shared FAISS index partitioned by tenant id,
+    #                        queried with an exact per-namespace id selector
+    tenant_isolation: str = "index_per_tenant"
+
     # --- Auth -------------------------------------------------------------
     # Static "key:tenant" pairs for local/dev. Swap for a real IdP + secrets
     # manager in production (see docs/04-deployment-and-ops.md).

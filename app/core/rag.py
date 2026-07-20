@@ -38,14 +38,18 @@ class RagEngine:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
         self.embeddings = build_embedding_provider(settings)
+        # Docstore first: shared-namespace vector isolation needs it to resolve
+        # each tenant's ids.
+        self.docstore = DocStore(settings.data_dir / "docstore.db")
         self.vector_store = VectorStore(
             data_dir=settings.data_dir,
             dimension=self.embeddings.dimension,
             index_type=settings.faiss_index_type,
             nlist=settings.ivf_nlist,
             nprobe=settings.ivf_nprobe,
+            isolation=settings.tenant_isolation,
+            docstore=self.docstore,
         )
-        self.docstore = DocStore(settings.data_dir / "docstore.db")
         self.bm25 = BM25Store(self.docstore)
         self.tenants = TenantRegistry(
             settings.data_dir / "tenants.db",
@@ -206,8 +210,10 @@ class RagEngine:
 
     def purge_tenant(self, tenant: str) -> None:
         """Delete all of a tenant's data: vectors + metadata (not the registry row)."""
-        self.docstore.delete_tenant(tenant)
+        # Drop vectors first: shared-namespace mode reads the tenant's ids from
+        # the docstore to know which vectors to remove from the shared index.
         self.vector_store.drop_tenant(tenant)
+        self.docstore.delete_tenant(tenant)
         self.bm25.invalidate(tenant)
 
     def tenant_stats(self, tenant: str) -> dict[str, object]:

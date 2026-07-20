@@ -98,9 +98,12 @@ FAISS_INDEX_TYPE=flat                   # per-tenant default; override per tenan
 # API_KEYS=demo-key:demo                # optional static keys (auto-registered)
 ```
 
-**Isolation model** (see [architecture §2.5](02-architecture.md)):
-- **Vectors** — one FAISS file per tenant at
-  `{DATA_DIR}/tenants/{tenant}/index.faiss` (`vector_store.py`).
+**Isolation model** (see [architecture §2.5](02-architecture.md) and the full
+treatment in **[doc 10: Tenant Isolation](10-tenant-isolation.md)**):
+- **Vectors** — two strategies via `TENANT_ISOLATION`:
+  `index_per_tenant` (one FAISS file per tenant, default) or `shared_namespace`
+  (one shared index partitioned by tenant id, queried with an exact id
+  selector). Both are leak-free (`vector_store.py`).
 - **Metadata** — every SQLite row is tenant-keyed (`docstore.py`).
 - **Identity** — a bearer key resolves to exactly one tenant
   (`deps.py:require_tenant`). There is no cross-tenant code path.

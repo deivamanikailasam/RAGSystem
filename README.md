@@ -185,6 +185,7 @@ All configuration is environment-driven (12-factor). See
 | `SINGLE_TENANT_ID`       | `default`          | Fixed tenant in single-tenant mode   |
 | `SINGLE_TENANT_REQUIRE_AUTH` | `false`        | Require a key in single-tenant mode  |
 | `ADMIN_API_KEY`          | *(unset)*          | Guards `/admin/*`; unset disables it  |
+| `TENANT_ISOLATION`       | `index_per_tenant` | `index_per_tenant` or `shared_namespace` |
 | `FAISS_INDEX_TYPE`       | `flat`             | `flat` or `ivf` (per-tenant default) |
 | `CHUNK_TOKENS`           | `400`              | Target chunk size                    |
 | `CHUNK_OVERLAP`          | `60`               | Overlap between chunks               |
@@ -222,6 +223,7 @@ brief, each with step-by-step instructions and pointers to the implementing code
 7. [Deployment modes: single-tenant vs multi-tenant](docs/07-deployment-modes.md)
 8. [Reranking stage: two-stage retrieve-then-rerank](docs/08-reranking.md)
 9. [Hybrid retrieval: BM25 + vector search](docs/09-hybrid-retrieval.md)
+10. [Tenant isolation: index-per-tenant vs shared namespace](docs/10-tenant-isolation.md)
 
 ---
 
