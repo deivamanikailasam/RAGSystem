@@ -1,0 +1,9 @@
+# Optional dependencies for the cross-encoder reranking strategy.
+#   RERANK_STRATEGY=cross_encoder
+#
+# Install with:  pip install -r requirements-rerank.txt
+#
+# These are intentionally kept OUT of the core requirements.txt so the base
+# system stays lightweight and fully offline-capable. Without them, the
+# cross_encoder strategy transparently falls back to the lexical reranker.
+sentence-transformers>=2.7,<4.0

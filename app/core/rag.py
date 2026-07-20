@@ -25,6 +25,7 @@ from app.core.docstore import DocStore
 from app.core.embeddings import build_embedding_provider
 from app.core.generator import build_generator
 from app.core.ingest import IngestedDocResult, IngestionPipeline
+from app.core.reranker import build_reranker
 from app.core.retriever import Retriever
 from app.core.tenants import QuotaExceeded, Tenant, TenantRegistry
 from app.core.vector_store import VectorStore
@@ -54,6 +55,7 @@ class RagEngine:
         self.retriever = Retriever(
             settings, self.embeddings, self.vector_store, self.docstore
         )
+        self.reranker = build_reranker(settings)
         self.generator = build_generator(settings)
 
         if not settings.is_single_tenant:
@@ -123,12 +125,27 @@ class RagEngine:
 
         METRICS.increment("queries")
 
+        final_k = top_k or self._settings.retrieval_top_k
+
+        # Stage 1 — retrieve a candidate pool (>= final_k so the reranker has
+        # room to promote a better passage). "none" reranking skips over-fetch.
+        if self.reranker.name == "none":
+            candidate_pool = final_k
+        else:
+            candidate_pool = max(self._settings.rerank_candidates, final_k)
+
         t0 = time.perf_counter()
-        chunks = self.retriever.retrieve(
-            tenant=tenant, question=question, top_k=top_k, filters=filters
+        candidates = self.retriever.retrieve(
+            tenant=tenant, question=question, limit=candidate_pool, filters=filters
         )
         retrieval_ms = (time.perf_counter() - t0) * 1000
         METRICS.observe("retrieval_ms", retrieval_ms)
+
+        # Stage 2 — rerank the candidates and keep the best final_k.
+        t_r = time.perf_counter()
+        chunks = self.reranker.rerank(question, candidates, top_n=final_k)
+        rerank_ms = (time.perf_counter() - t_r) * 1000
+        METRICS.observe("rerank_ms", rerank_ms)
 
         # Cap context passed to the model regardless of retrieval depth.
         chunks = chunks[: self._settings.max_context_chunks]
@@ -149,6 +166,9 @@ class RagEngine:
                 source=ch.record.source,
                 chunk_index=ch.record.chunk_index,
                 score=round(ch.score, 4),
+                rerank_score=(
+                    round(ch.rerank_score, 4) if ch.rerank_score is not None else None
+                ),
                 snippet=_snippet(ch.record.text),
             )
             for ch in chunks
@@ -158,7 +178,9 @@ class RagEngine:
             answer=generation.answer,
             citations=citations,
             model=generation.model,
+            reranker=self.reranker.name,
             retrieval_ms=round(retrieval_ms, 2),
+            rerank_ms=round(rerank_ms, 2),
             generation_ms=round(generation_ms, 2),
             tokens=generation.tokens,
             request_id=request_id,

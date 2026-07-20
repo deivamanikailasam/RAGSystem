@@ -32,8 +32,20 @@ class Settings(BaseSettings):
 
     # --- Retrieval --------------------------------------------------------
     retrieval_top_k: int = 6
-    rerank_enabled: bool = False
     min_score: float = 0.0
+
+    # --- Reranking (second stage; see docs/08-reranking.md) ---------------
+    # Strategy: "none" | "lexical" | "cross_encoder" | "llm".
+    rerank_strategy: str = "lexical"
+    # Candidates pulled from vector search before reranking down to top_k.
+    rerank_candidates: int = 20
+    # Cross-encoder model (requires requirements-rerank.txt).
+    cross_encoder_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    # LLM reranker model (defaults to GENERATION_MODEL when unset).
+    rerank_llm_model: str | None = None
+    # Deprecated alias kept for backward compatibility: if the strategy is left
+    # at "none" but this is true, the lexical reranker is used.
+    rerank_enabled: bool = False
 
     # --- FAISS ------------------------------------------------------------
     faiss_index_type: str = "flat"  # "flat" | "ivf"
@@ -74,6 +86,13 @@ class Settings(BaseSettings):
     @property
     def is_single_tenant(self) -> bool:
         return self.deployment_mode == "single_tenant"
+
+    @property
+    def effective_rerank_strategy(self) -> str:
+        """Resolve the rerank strategy, honoring the legacy ``rerank_enabled``."""
+        if self.rerank_strategy == "none" and self.rerank_enabled:
+            return "lexical"
+        return self.rerank_strategy
 
     @property
     def use_openai(self) -> bool:

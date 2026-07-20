@@ -96,11 +96,14 @@ FAISS returns `(vector_id, score)` pairs. We hydrate them into full chunk
 records from SQLite, drop anything below `MIN_SCORE`, and apply metadata
 equality filters (e.g. `{"doc_type": "policy"}`).
 
-### Step 4 — Rerank (optional)
-If `RERANK_ENABLED=true`, `Retriever._rerank` reorders candidates. The shipped
-implementation is a cheap lexical term-overlap boost so the hook works offline;
-**swap this one method** to plug in a cross-encoder or LLM reranker for
-production quality. The rest of the pipeline is unchanged.
+### Step 4 — Rerank (first-class stage)
+Retrieval returns a **candidate pool** (default 20). The reranking stage
+(`app/core/reranker.py`) re-scores those candidates *jointly with the query* and
+keeps the best `top_k`, setting a `rerank_score` on each. Strategy is chosen by
+`RERANK_STRATEGY`: `none`, `lexical` (BM25, the offline default),
+`cross_encoder` (a real reranker model), or `llm`. This is a full pipeline stage,
+not a hook — see **[docs/08-reranking.md](08-reranking.md)** for the deep dive,
+tuning, and how to plug in your own reranker.
 
 ### Step 5 — Prompt assembly with guardrails
 `app/core/generator.py:build_messages` builds:

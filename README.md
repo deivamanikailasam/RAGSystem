@@ -75,7 +75,12 @@ docker compose up --build
                                         │    docstore       │
                                         └────────┬─────────┘
                                                  │
-   user query ──▶ /v1/query ──▶ embed ──▶ FAISS top-k ──▶ filter/rerank
+   user query ──▶ /v1/query ──▶ embed ──▶ FAISS top-N ──▶ filter
+                                                 │  (stage 1: recall)
+                                                 ▼
+                                        rerank N ──▶ top-k
+                                        (stage 2: precision;
+                                         none/lexical/cross-encoder/llm)
                                                  │
                                                  ▼
                                         prompt assembly ──▶ OpenAI (or
@@ -148,7 +153,8 @@ app/
     docstore.py        # SQLite metadata store
     tenants.py         # tenant registry: config, quotas, issued keys (multi-tenant)
     ingest.py          # ingestion pipeline (parse → chunk → embed → index)
-    retriever.py       # similarity search + metadata filter + rerank
+    retriever.py       # stage 1: similarity search + metadata filter (candidates)
+    reranker.py        # stage 2: none/lexical(BM25)/cross-encoder/llm rerankers
     generator.py       # prompt assembly + LLM call + fallback
     rag.py             # end-to-end orchestration + per-tenant policy/quotas
   api/routes.py        # tenant HTTP endpoints
@@ -179,7 +185,9 @@ All configuration is environment-driven (12-factor). See
 | `FAISS_INDEX_TYPE`       | `flat`             | `flat` or `ivf` (per-tenant default) |
 | `CHUNK_TOKENS`           | `400`              | Target chunk size                    |
 | `CHUNK_OVERLAP`          | `60`               | Overlap between chunks               |
-| `RETRIEVAL_TOP_K`        | `6`                | Chunks retrieved per query           |
+| `RETRIEVAL_TOP_K`        | `6`                | Chunks kept for the answer           |
+| `RERANK_STRATEGY`        | `lexical`          | `none`/`lexical`/`cross_encoder`/`llm` |
+| `RERANK_CANDIDATES`      | `20`               | Candidate pool size before reranking |
 | `DATA_DIR`               | `./data`           | Where indices + docstore live        |
 
 ---
@@ -187,8 +195,9 @@ All configuration is environment-driven (12-factor). See
 ## Testing & evaluation
 
 ```bash
-pytest -q                      # unit + API tests (no API key required)
-python eval/run_eval.py        # retrieval + answer-quality metrics
+pytest -q                        # unit + API tests (no API key required)
+python eval/run_eval.py          # retrieval + answer-quality metrics
+python scripts/compare_rerank.py # compare reranking strategies side by side
 ```
 
 ---
@@ -205,6 +214,7 @@ brief, each with step-by-step instructions and pointers to the implementing code
 5. [Evaluation, monitoring & maintenance](docs/05-evaluation-and-monitoring.md)
 6. [Scaling & evolution](docs/06-scaling-and-evolution.md)
 7. [Deployment modes: single-tenant vs multi-tenant](docs/07-deployment-modes.md)
+8. [Reranking stage: two-stage retrieve-then-rerank](docs/08-reranking.md)
 
 ---
 

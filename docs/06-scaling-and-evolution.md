@@ -80,8 +80,10 @@ prompts/flows over the existing `Retriever`:
   connectors that normalize to text + metadata and call the same ingest path.
 - **Hybrid retrieval** — combine FAISS (dense) with a keyword/BM25 index and
   fuse scores for better recall on rare terms.
-- **Real reranking** — replace the lexical stub in `Retriever._rerank` with a
-  cross-encoder or LLM reranker.
+- **Reranking** — a first-class two-stage retrieve-then-rerank pipeline ships in
+  `app/core/reranker.py` (`none`/`lexical`/`cross_encoder`/`llm`); for larger
+  corpora switch from `lexical` to `cross_encoder` and tune `RERANK_CANDIDATES`.
+  See [docs/08-reranking.md](08-reranking.md).
 
 ## 6.6 Evolution roadmap (suggested order)
 

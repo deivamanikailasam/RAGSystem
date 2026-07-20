@@ -55,7 +55,10 @@ class Citation(BaseModel):
     doc_id: str
     source: str
     chunk_index: int
-    score: float
+    score: float = Field(..., description="Raw vector similarity (stage 1).")
+    rerank_score: float | None = Field(
+        default=None, description="Reranker relevance score (stage 2), if reranked."
+    )
     snippet: str
 
 
@@ -63,7 +66,9 @@ class QueryResponse(BaseModel):
     answer: str
     citations: list[Citation]
     model: str
+    reranker: str = Field(default="none", description="Reranking strategy used.")
     retrieval_ms: float
+    rerank_ms: float = 0.0
     generation_ms: float
     tokens: dict[str, int] = Field(default_factory=dict)
     request_id: str

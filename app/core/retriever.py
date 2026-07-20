@@ -1,4 +1,11 @@
-"""Retrieval: embed query → FAISS search → metadata filter → optional rerank."""
+"""Retrieval stage: embed query → FAISS search → metadata filter.
+
+This is the *first* stage of two-stage retrieval. It is intentionally
+recall-oriented: it returns a candidate pool (larger than the final ``top_k``)
+ordered by raw vector similarity. The precision-oriented reordering happens in
+the separate reranking stage (:mod:`app.core.reranker`), wired together in
+:meth:`app.core.rag.RagEngine.query`.
+"""
 
 from __future__ import annotations
 
@@ -13,7 +20,8 @@ from app.core.vector_store import VectorStore
 @dataclass
 class RetrievedChunk:
     record: ChunkRecord
-    score: float
+    score: float                      # raw vector similarity (stage 1)
+    rerank_score: float | None = None  # set by the reranker (stage 2)
 
 
 class Retriever:
@@ -34,14 +42,20 @@ class Retriever:
         *,
         tenant: str,
         question: str,
-        top_k: int | None = None,
+        limit: int,
         filters: dict[str, str] | None = None,
     ) -> list[RetrievedChunk]:
-        filters = filters or {}
-        k = top_k or self._settings.retrieval_top_k
+        """Return up to ``limit`` candidate chunks, ordered by vector score.
 
-        # Over-fetch so that metadata filtering still leaves enough candidates.
-        fetch_k = k * 4 if filters else k
+        ``limit`` is the *candidate pool* size — typically larger than the final
+        answer's ``top_k`` so the reranker has room to promote a better passage
+        that vector search ranked lower.
+        """
+        filters = filters or {}
+
+        # Over-fetch further when filtering, so filtered-out hits don't starve
+        # the candidate pool.
+        fetch_k = limit * 4 if filters else limit
         query_vec = self._embeddings.embed([question])[0]
 
         hits = self._store.for_tenant(tenant).search(query_vec, fetch_k)
@@ -60,11 +74,10 @@ class Retriever:
             if not self._matches(rec, filters):
                 continue
             results.append(RetrievedChunk(record=rec, score=hit.score))
+            if len(results) >= limit:
+                break
 
-        if self._settings.rerank_enabled:
-            results = self._rerank(question, results)
-
-        return results[:k]
+        return results
 
     @staticmethod
     def _matches(rec: ChunkRecord, filters: dict[str, str]) -> bool:
@@ -72,22 +85,3 @@ class Retriever:
             if rec.metadata.get(key) != value:
                 return False
         return True
-
-    def _rerank(
-        self, question: str, results: list[RetrievedChunk]
-    ) -> list[RetrievedChunk]:
-        """Lightweight lexical rerank layered on top of vector scores.
-
-        A production system would call a cross-encoder / LLM reranker here. We
-        provide a cheap, dependency-free heuristic — term-overlap boosting —
-        so the hook is exercised end-to-end offline. Swap this method to plug
-        in a real reranker (see docs/03-implementation.md §3.2).
-        """
-        q_terms = {t.lower() for t in question.split()}
-
-        def boosted(item: RetrievedChunk) -> float:
-            terms = {t.lower() for t in item.record.text.split()}
-            overlap = len(q_terms & terms) / (len(q_terms) or 1)
-            return item.score + 0.1 * overlap
-
-        return sorted(results, key=boosted, reverse=True)
