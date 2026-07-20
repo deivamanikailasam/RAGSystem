@@ -27,7 +27,13 @@ from app.models import (
     QueryRequest,
     QueryResponse,
     TenantStats,
+    VoiceEventRequest,
+    VoiceEventResponse,
+    VoiceSessionCreate,
+    VoiceSessionResponse,
 )
+from app.core.voice_fsm import Event, InvalidTransition
+from app.core.voice_session import SessionNotFound
 from app.observability.metrics import METRICS
 
 router = APIRouter()
@@ -171,6 +177,97 @@ def delete_conversation(
 ) -> DeleteConversationResponse:
     deleted = engine.delete_conversation(tenant=tenant, session_id=session_id)
     return DeleteConversationResponse(session_id=session_id, deleted_messages=deleted)
+
+
+@router.post("/v1/voice/sessions", response_model=VoiceSessionResponse, tags=["voice"])
+def create_voice_session(
+    body: VoiceSessionCreate | None = None,
+    tenant: str = Depends(require_tenant),
+    engine: RagEngine = Depends(get_engine),
+) -> VoiceSessionResponse:
+    """Create a voice session (starts in state 'idle')."""
+    session_id = body.session_id if body else None
+    session = engine.voice.create_session(tenant, session_id)
+    return _voice_session_response(session, engine)
+
+
+@router.post(
+    "/v1/voice/sessions/{session_id}/events",
+    response_model=VoiceEventResponse,
+    tags=["voice"],
+)
+def voice_event(
+    session_id: str,
+    body: VoiceEventRequest,
+    tenant: str = Depends(require_tenant),
+    engine: RagEngine = Depends(get_engine),
+) -> VoiceEventResponse:
+    """Drive the session state machine with an event.
+
+    A 'transcript' event runs a grounded RAG turn and returns the reply to
+    speak. Illegal transitions return 409 with the events allowed here.
+    """
+    try:
+        event = Event(body.event)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=f"Unknown event '{body.event}'.") from exc
+
+    result = engine.voice.send_event(
+        tenant=tenant, session_id=session_id, event=event,
+        text=body.text, message=body.message, top_k=body.top_k, filters=body.filters,
+    )
+    return VoiceEventResponse(
+        session_id=result.session_id,
+        event=result.event.value,
+        previous_state=result.previous_state.value,
+        state=result.state.value,
+        allowed_events=[e.value for e in result.allowed_events],
+        turn_count=result.turn_count,
+        barge_in_count=result.barge_in_count,
+        say=result.say,
+        citations=result.citations,
+        standalone_question=result.standalone_question,
+    )
+
+
+@router.get(
+    "/v1/voice/sessions/{session_id}",
+    response_model=VoiceSessionResponse,
+    tags=["voice"],
+)
+def get_voice_session(
+    session_id: str,
+    tenant: str = Depends(require_tenant),
+    engine: RagEngine = Depends(get_engine),
+) -> VoiceSessionResponse:
+    session = engine.voice.get_session(tenant, session_id)
+    return _voice_session_response(session, engine)
+
+
+@router.delete("/v1/voice/sessions/{session_id}", tags=["voice"])
+def delete_voice_session(
+    session_id: str,
+    tenant: str = Depends(require_tenant),
+    engine: RagEngine = Depends(get_engine),
+) -> dict[str, object]:
+    deleted = engine.voice.delete_session(tenant, session_id)
+    return {"session_id": session_id, "deleted": deleted}
+
+
+def _voice_session_response(session, engine: RagEngine) -> VoiceSessionResponse:
+    return VoiceSessionResponse(
+        session_id=session.session_id,
+        tenant=session.tenant,
+        state=session.state.value,
+        allowed_events=[e.value for e in engine.voice.allowed_events(session.state)],
+        last_transcript=session.last_transcript,
+        last_response=session.last_response,
+        turn_count=session.turn_count,
+        barge_in_count=session.barge_in_count,
+        error=session.error,
+        created_at=session.created_at,
+        updated_at=session.updated_at,
+    )
 
 
 @router.delete(

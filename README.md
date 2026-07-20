@@ -127,6 +127,9 @@ DEPLOYMENT_MODE=multi_tenant ADMIN_API_KEY=secret uvicorn app.main:app
 | POST   | `/v1/chat`       | Multi-turn chat turn (context-tracked)        | tenant |
 | GET    | `/v1/chat/{id}`  | Conversation history                          | tenant |
 | DELETE | `/v1/chat/{id}`  | Delete a conversation                         | tenant |
+| POST   | `/v1/voice/sessions` | Create a voice session (FSM)              | tenant |
+| POST   | `/v1/voice/sessions/{id}/events` | Drive the voice state machine | tenant |
+| GET/DELETE | `/v1/voice/sessions/{id}` | Session state / end session       | tenant |
 | POST   | `/v1/ingest`     | Ingest raw text                               | tenant |
 | POST   | `/v1/ingest/file`| Ingest an uploaded file (PDF/MD/TXT/HTML)     | tenant |
 | POST   | `/v1/query`      | Ask a question (RAG)                          | tenant |
@@ -164,6 +167,8 @@ app/
     generator.py       # prompt assembly (history-aware) + LLM call + fallback
     conversation.py    # per-tenant multi-turn chat history (SQLite)
     condenser.py       # follow-up -> standalone question rewriting
+    voice_fsm.py       # voice assistant finite state machine (pure)
+    voice_session.py   # per-tenant voice session persistence + manager
     rag.py             # end-to-end orchestration + per-tenant policy/quotas
   api/routes.py        # tenant HTTP endpoints
   api/admin.py         # /admin/* tenant control plane (multi-tenant)
@@ -235,6 +240,7 @@ brief, each with step-by-step instructions and pointers to the implementing code
 10. [Tenant isolation: index-per-tenant vs shared namespace](docs/10-tenant-isolation.md)
 11. [Retrieval evaluation: precision / recall / MAP / nDCG](docs/11-retrieval-evaluation.md)
 12. [Multi-turn chatbot with context tracking](docs/12-multi-turn-chat.md)
+13. [Voice-assistant session state machine](docs/13-voice-session-state-machine.md)
 
 ---
 

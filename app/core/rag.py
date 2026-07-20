@@ -32,6 +32,7 @@ from app.core.reranker import build_reranker
 from app.core.retriever import Retriever
 from app.core.tenants import QuotaExceeded, Tenant, TenantRegistry
 from app.core.vector_store import VectorStore
+from app.core.voice_session import VoiceSessionManager, VoiceSessionStore
 from app.models import ChatResponse, Citation, QueryResponse
 from app.observability.metrics import METRICS
 
@@ -67,6 +68,9 @@ class RagEngine:
         self.generator = build_generator(settings)
         self.conversations = ConversationStore(settings.data_dir / "conversations.db")
         self.condenser = build_condenser(settings)
+        self.voice = VoiceSessionManager(
+            VoiceSessionStore(settings.data_dir / "voice_sessions.db"), self
+        )
 
         if not settings.is_single_tenant:
             self._seed_static_tenants()
@@ -321,6 +325,7 @@ class RagEngine:
         self.docstore.delete_tenant(tenant)
         self.bm25.invalidate(tenant)
         self.conversations.delete_tenant(tenant)
+        self.voice._store.delete_tenant(tenant)  # noqa: SLF001
 
     def tenant_stats(self, tenant: str) -> dict[str, object]:
         """Runtime stats for the current tenant (used by GET /v1/me)."""

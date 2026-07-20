@@ -142,6 +142,56 @@ class DeleteConversationResponse(BaseModel):
     deleted_messages: int
 
 
+# --------------------------------------------------------------------------- #
+# Voice assistant session state machine
+# --------------------------------------------------------------------------- #
+class VoiceSessionCreate(BaseModel):
+    session_id: str | None = Field(
+        default=None, description="Optional client-supplied id; generated if omitted."
+    )
+
+
+class VoiceEventRequest(BaseModel):
+    event: str = Field(
+        ...,
+        description="FSM event: start | transcript | speak_done | barge_in | "
+        "silence_timeout | end | error | recover | wake.",
+    )
+    text: str | None = Field(
+        default=None, description="User utterance transcript (for 'transcript')."
+    )
+    message: str | None = Field(default=None, description="Detail for 'error'.")
+    top_k: int | None = None
+    filters: dict[str, str] = Field(default_factory=dict)
+
+
+class VoiceEventResponse(BaseModel):
+    session_id: str
+    event: str
+    previous_state: str
+    state: str
+    allowed_events: list[str]
+    turn_count: int
+    barge_in_count: int
+    say: str | None = None
+    citations: list[dict] | None = None
+    standalone_question: str | None = None
+
+
+class VoiceSessionResponse(BaseModel):
+    session_id: str
+    tenant: str
+    state: str
+    allowed_events: list[str]
+    last_transcript: str | None
+    last_response: str | None
+    turn_count: int
+    barge_in_count: int
+    error: str | None
+    created_at: float
+    updated_at: float
+
+
 class HealthResponse(BaseModel):
     status: str
     version: str

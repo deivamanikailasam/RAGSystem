@@ -23,6 +23,8 @@ from app.core.tenants import (
     TenantError,
     TenantNotFound,
 )
+from app.core.voice_fsm import InvalidTransition
+from app.core.voice_session import SessionNotFound
 
 
 def create_app() -> FastAPI:
@@ -69,6 +71,28 @@ def create_app() -> FastAPI:
     @app.exception_handler(TenantError)
     async def _tenant_error_handler(_: Request, exc: TenantError) -> JSONResponse:
         return JSONResponse(status_code=400, content={"detail": str(exc)})
+
+    @app.exception_handler(SessionNotFound)
+    async def _voice_missing_handler(_: Request, exc: SessionNotFound) -> JSONResponse:
+        return JSONResponse(
+            status_code=404, content={"detail": f"Voice session '{exc}' not found."}
+        )
+
+    @app.exception_handler(InvalidTransition)
+    async def _voice_transition_handler(_: Request, exc: InvalidTransition) -> JSONResponse:
+        from app.core.voice_fsm import VoiceStateMachine
+
+        return JSONResponse(
+            status_code=409,
+            content={
+                "detail": str(exc),
+                "state": exc.state.value,
+                "event": exc.event.value,
+                "allowed_events": [
+                    e.value for e in VoiceStateMachine.allowed_events(exc.state)
+                ],
+            },
+        )
 
     return app
 
