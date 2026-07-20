@@ -1,0 +1,5 @@
+{"question": "What data structure does FAISS use for similarity search?", "expected_doc_id": "faiss-overview", "expected_keywords": ["vector", "index"]}
+{"question": "How are documents split before embedding?", "expected_doc_id": "faiss-overview", "expected_keywords": ["chunk", "overlap"]}
+{"question": "Which OpenAI model generates the final answer?", "expected_doc_id": "pipeline", "expected_keywords": ["gpt", "generation"]}
+{"question": "How does the system keep tenants isolated?", "expected_doc_id": "pipeline", "expected_keywords": ["tenant", "index"]}
+{"question": "What happens when the answer is not in the documents?", "expected_doc_id": "pipeline", "expected_keywords": ["don't know", "context"]}
