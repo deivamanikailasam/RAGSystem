@@ -20,6 +20,10 @@ from app.models import (
     ConversationResponse,
     DeleteConversationResponse,
     DeleteResponse,
+    DialogueRequest,
+    DialogueResponse,
+    DialogueStateResponse,
+    IntentEventModel,
     HealthResponse,
     IngestedDoc,
     IngestRequest,
@@ -177,6 +181,77 @@ def delete_conversation(
 ) -> DeleteConversationResponse:
     deleted = engine.delete_conversation(tenant=tenant, session_id=session_id)
     return DeleteConversationResponse(session_id=session_id, deleted_messages=deleted)
+
+
+@router.post("/v1/dialogue", response_model=DialogueResponse, tags=["dialogue"])
+def dialogue(
+    body: DialogueRequest,
+    tenant: str = Depends(require_tenant),
+    engine: RagEngine = Depends(get_engine),
+) -> DialogueResponse:
+    """Classify the turn's intent, act on it (RAG answer or canned reply),
+    and persist the intent + dialogue state."""
+    turn = engine.dialogue.handle(
+        tenant=tenant, message=body.message, session_id=body.session_id,
+        top_k=body.top_k, filters=body.filters,
+    )
+    return DialogueResponse(
+        session_id=turn.session_id,
+        turn_index=turn.turn_index,
+        intent=turn.intent.value,
+        confidence=turn.confidence,
+        action=turn.action.value,
+        slots=turn.slots,
+        answer=turn.answer,
+        classifier=turn.classifier,
+        citations=turn.citations,
+        standalone_question=turn.standalone_question,
+        model=turn.model,
+    )
+
+
+@router.get(
+    "/v1/dialogue/{session_id}",
+    response_model=DialogueStateResponse,
+    tags=["dialogue"],
+)
+def get_dialogue(
+    session_id: str,
+    tenant: str = Depends(require_tenant),
+    engine: RagEngine = Depends(get_engine),
+) -> DialogueStateResponse:
+    """Return the dialogue state and the persisted intent history."""
+    state = engine.dialogue.get_state(tenant, session_id)
+    if state is None:
+        raise HTTPException(status_code=404, detail="Dialogue not found.")
+    intents = engine.dialogue.get_intents(tenant, session_id)
+    return DialogueStateResponse(
+        session_id=session_id,
+        tenant=tenant,
+        current_intent=state.current_intent,
+        turn_count=state.turn_count,
+        slots=state.slots,
+        intents=[
+            IntentEventModel(
+                turn_index=e.turn_index, message=e.message, intent=e.intent,
+                confidence=e.confidence, action=e.action, slots=e.slots,
+                created_at=e.created_at,
+            )
+            for e in intents
+        ],
+        created_at=state.created_at,
+        updated_at=state.updated_at,
+    )
+
+
+@router.delete("/v1/dialogue/{session_id}", tags=["dialogue"])
+def delete_dialogue(
+    session_id: str,
+    tenant: str = Depends(require_tenant),
+    engine: RagEngine = Depends(get_engine),
+) -> dict[str, object]:
+    deleted = engine.dialogue.delete_session(tenant, session_id)
+    return {"session_id": session_id, "deleted_events": deleted}
 
 
 @router.post("/v1/voice/sessions", response_model=VoiceSessionResponse, tags=["voice"])

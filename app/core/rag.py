@@ -24,10 +24,13 @@ from app.config import Settings
 from app.core.bm25 import BM25Store
 from app.core.condenser import build_condenser
 from app.core.conversation import ConversationStore
+from app.core.dialogue import DialogueManager
+from app.core.dialogue_store import DialogueStore
 from app.core.docstore import DocStore
 from app.core.embeddings import build_embedding_provider
 from app.core.generator import build_generator
 from app.core.ingest import IngestedDocResult, IngestionPipeline
+from app.core.intents import build_intent_classifier
 from app.core.reranker import build_reranker
 from app.core.retriever import Retriever
 from app.core.tenants import QuotaExceeded, Tenant, TenantRegistry
@@ -70,6 +73,12 @@ class RagEngine:
         self.condenser = build_condenser(settings)
         self.voice = VoiceSessionManager(
             VoiceSessionStore(settings.data_dir / "voice_sessions.db"), self
+        )
+        self.dialogue = DialogueManager(
+            DialogueStore(settings.data_dir / "dialogue.db"),
+            self,
+            build_intent_classifier(settings),
+            settings,
         )
 
         if not settings.is_single_tenant:
@@ -326,6 +335,7 @@ class RagEngine:
         self.bm25.invalidate(tenant)
         self.conversations.delete_tenant(tenant)
         self.voice._store.delete_tenant(tenant)  # noqa: SLF001
+        self.dialogue._store.delete_tenant(tenant)  # noqa: SLF001
 
     def tenant_stats(self, tenant: str) -> dict[str, object]:
         """Runtime stats for the current tenant (used by GET /v1/me)."""

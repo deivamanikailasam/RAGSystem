@@ -178,6 +178,50 @@ class VoiceEventResponse(BaseModel):
     standalone_question: str | None = None
 
 
+class DialogueRequest(BaseModel):
+    message: str = Field(..., min_length=1)
+    session_id: str | None = Field(
+        default=None, description="Dialogue to continue; created if omitted."
+    )
+    top_k: int | None = None
+    filters: dict[str, str] = Field(default_factory=dict)
+
+
+class DialogueResponse(BaseModel):
+    session_id: str
+    turn_index: int
+    intent: str
+    confidence: float
+    action: str
+    slots: dict[str, str] = Field(default_factory=dict)
+    answer: str
+    classifier: str
+    citations: list[dict] = Field(default_factory=list)
+    standalone_question: str | None = None
+    model: str | None = None
+
+
+class IntentEventModel(BaseModel):
+    turn_index: int
+    message: str
+    intent: str
+    confidence: float
+    action: str
+    slots: dict[str, str] = Field(default_factory=dict)
+    created_at: float
+
+
+class DialogueStateResponse(BaseModel):
+    session_id: str
+    tenant: str
+    current_intent: str | None
+    turn_count: int
+    slots: dict[str, str] = Field(default_factory=dict)
+    intents: list[IntentEventModel] = Field(default_factory=list)
+    created_at: float
+    updated_at: float
+
+
 class VoiceSessionResponse(BaseModel):
     session_id: str
     tenant: str

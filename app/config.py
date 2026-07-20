@@ -102,6 +102,12 @@ class Settings(BaseSettings):
     # Rewrite follow-up questions into standalone queries before retrieval.
     chat_condense_question: bool = True
 
+    # --- Dialogue manager (see docs/14-dialogue-manager.md) ---------------
+    intent_strategy: str = "rule"        # "rule" | "llm"
+    # Below this confidence a non-question intent is treated as a question
+    # (safer default for a documentation assistant).
+    intent_confidence_threshold: float = 0.5
+
     # --- Server -----------------------------------------------------------
     log_level: str = "INFO"
 

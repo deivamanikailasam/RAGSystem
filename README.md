@@ -130,6 +130,8 @@ DEPLOYMENT_MODE=multi_tenant ADMIN_API_KEY=secret uvicorn app.main:app
 | POST   | `/v1/voice/sessions` | Create a voice session (FSM)              | tenant |
 | POST   | `/v1/voice/sessions/{id}/events` | Drive the voice state machine | tenant |
 | GET/DELETE | `/v1/voice/sessions/{id}` | Session state / end session       | tenant |
+| POST   | `/v1/dialogue`   | Dialogue turn (intent → policy → action)      | tenant |
+| GET/DELETE | `/v1/dialogue/{id}` | Dialogue state + intent history / clear   | tenant |
 | POST   | `/v1/ingest`     | Ingest raw text                               | tenant |
 | POST   | `/v1/ingest/file`| Ingest an uploaded file (PDF/MD/TXT/HTML)     | tenant |
 | POST   | `/v1/query`      | Ask a question (RAG)                          | tenant |
@@ -169,6 +171,9 @@ app/
     condenser.py       # follow-up -> standalone question rewriting
     voice_fsm.py       # voice assistant finite state machine (pure)
     voice_session.py   # per-tenant voice session persistence + manager
+    intents.py         # intent classification (rule + llm) + slot extraction
+    dialogue.py        # dialogue policy + manager (intent -> action routing)
+    dialogue_store.py  # per-tenant intent + dialogue-state persistence
     rag.py             # end-to-end orchestration + per-tenant policy/quotas
   api/routes.py        # tenant HTTP endpoints
   api/admin.py         # /admin/* tenant control plane (multi-tenant)
@@ -206,6 +211,7 @@ All configuration is environment-driven (12-factor). See
 | `RERANK_CANDIDATES`      | `20`               | Candidate pool size before reranking |
 | `CHAT_HISTORY_TURNS`     | `8`                | Prior messages fed to the chatbot    |
 | `CHAT_CONDENSE_QUESTION` | `true`             | Rewrite follow-ups before retrieval  |
+| `INTENT_STRATEGY`        | `rule`             | Dialogue intent classifier: `rule`/`llm` |
 | `DATA_DIR`               | `./data`           | Where indices + docstore live        |
 
 ---
@@ -241,6 +247,7 @@ brief, each with step-by-step instructions and pointers to the implementing code
 11. [Retrieval evaluation: precision / recall / MAP / nDCG](docs/11-retrieval-evaluation.md)
 12. [Multi-turn chatbot with context tracking](docs/12-multi-turn-chat.md)
 13. [Voice-assistant session state machine](docs/13-voice-session-state-machine.md)
+14. [Dialogue manager with intent persistence](docs/14-dialogue-manager.md)
 
 ---
 
