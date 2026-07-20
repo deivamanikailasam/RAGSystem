@@ -201,8 +201,10 @@ All configuration is environment-driven (12-factor). See
 ## Testing & evaluation
 
 ```bash
-pytest -q                        # unit + API tests (no API key required)
-python eval/run_eval.py          # retrieval + answer-quality metrics
+pytest -q                           # unit + API tests (no API key required)
+python eval/run_eval.py             # quick retrieval + answer-quality check
+python eval/retrieval_eval.py       # precision/recall/F1/MAP/nDCG on labeled data
+python eval/retrieval_eval.py --compare   # metrics across vector/bm25/hybrid
 python scripts/compare_rerank.py    # compare reranking strategies side by side
 python scripts/compare_retrieval.py # compare vector / bm25 / hybrid modes
 ```

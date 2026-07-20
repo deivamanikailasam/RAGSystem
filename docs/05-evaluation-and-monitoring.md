@@ -14,6 +14,12 @@ a fixed corpus in `eval/corpus.jsonl`.
 python eval/run_eval.py
 ```
 
+> For a **dedicated retrieval-quality evaluation** with full IR metrics
+> (precision@k, recall@k, F1, MAP, nDCG) over multi-document relevance
+> judgments, and per-mode comparison, see
+> **[doc 11: Retrieval Evaluation](11-retrieval-evaluation.md)**
+> (`eval/retrieval_eval.py`). `run_eval.py` below is the quick smoke check.
+
 It reports, separating **retrieval** quality from **answer** quality:
 
 | Metric | What it tells you | Why it matters |

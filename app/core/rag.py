@@ -114,6 +114,36 @@ class RagEngine:
         METRICS.increment("chunks_ingested", result.chunks)
         return result
 
+    def _candidate_pool(self, final_k: int) -> int:
+        """Stage-1 pool size: >= final_k so the reranker can promote a passage.
+
+        ``none`` reranking skips the over-fetch (there is nothing to reorder).
+        """
+        if self.reranker.name == "none":
+            return final_k
+        return max(self._settings.rerank_candidates, final_k)
+
+    def retrieve(
+        self,
+        *,
+        tenant: str,
+        question: str,
+        top_k: int | None = None,
+        filters: dict[str, str] | None = None,
+    ):
+        """Run stage-1 retrieval + stage-2 reranking and return the ranked chunks.
+
+        This is the generation-free path used by the retrieval evaluation harness
+        (``eval/retrieval_eval.py``); ``query`` performs the same two stages and
+        then calls the generator.
+        """
+        final_k = top_k or self._settings.retrieval_top_k
+        candidates = self.retriever.retrieve(
+            tenant=tenant, question=question,
+            limit=self._candidate_pool(final_k), filters=filters,
+        )
+        return self.reranker.rerank(question, candidates, top_n=final_k)
+
     def query(
         self,
         *,
@@ -136,16 +166,10 @@ class RagEngine:
 
         final_k = top_k or self._settings.retrieval_top_k
 
-        # Stage 1 — retrieve a candidate pool (>= final_k so the reranker has
-        # room to promote a better passage). "none" reranking skips over-fetch.
-        if self.reranker.name == "none":
-            candidate_pool = final_k
-        else:
-            candidate_pool = max(self._settings.rerank_candidates, final_k)
-
         t0 = time.perf_counter()
         candidates = self.retriever.retrieve(
-            tenant=tenant, question=question, limit=candidate_pool, filters=filters
+            tenant=tenant, question=question,
+            limit=self._candidate_pool(final_k), filters=filters,
         )
         retrieval_ms = (time.perf_counter() - t0) * 1000
         METRICS.observe("retrieval_ms", retrieval_ms)

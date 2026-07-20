@@ -1,0 +1,8 @@
+{"question": "How does FAISS index vectors for nearest neighbor search?", "relevant_doc_ids": ["faiss_index", "faiss_ivf"]}
+{"question": "What is BM25 and how does hybrid retrieval use it?", "relevant_doc_ids": ["bm25", "hybrid"]}
+{"question": "How are documents chunked and turned into embeddings?", "relevant_doc_ids": ["chunking", "embeddings"]}
+{"question": "How can I improve the precision of retrieved results?", "relevant_doc_ids": ["rerank", "hybrid"]}
+{"question": "approximate nearest neighbor search with IVF cells and nprobe", "relevant_doc_ids": ["faiss_ivf"]}
+{"question": "What metrics measure retrieval quality?", "relevant_doc_ids": ["evaluation"]}
+{"question": "How is each tenant's data kept separate?", "relevant_doc_ids": ["tenancy"]}
+{"question": "How do I deploy the service and manage the API key secret?", "relevant_doc_ids": ["deploy"]}

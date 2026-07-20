@@ -1,0 +1,10 @@
+{"doc_id": "faiss_index", "source": "faiss_index.md", "text": "FAISS builds an index of dense vectors and performs approximate nearest neighbor search to find the most similar embeddings to a query vector."}
+{"doc_id": "faiss_ivf", "source": "faiss_ivf.md", "text": "The IVF index in FAISS partitions vectors into Voronoi cells with a coarse quantizer; nprobe controls how many cells are scanned, trading recall for latency."}
+{"doc_id": "chunking", "source": "chunking.md", "text": "Documents are split into overlapping token windows called chunks before embedding, so a fact that spans a boundary still appears intact in at least one chunk."}
+{"doc_id": "embeddings", "source": "embeddings.md", "text": "OpenAI embedding models map a piece of text to a dense vector that captures its meaning, so semantically similar texts land close together in vector space."}
+{"doc_id": "rerank", "source": "rerank.md", "text": "A reranker reorders the retrieved candidate passages by scoring each one jointly with the query, improving the precision of the final top results."}
+{"doc_id": "bm25", "source": "bm25.md", "text": "BM25 is a sparse lexical ranking function based on term frequency and inverse document frequency with length normalization; it excels at exact keyword matching."}
+{"doc_id": "hybrid", "source": "hybrid.md", "text": "Hybrid retrieval fuses dense vector search with sparse BM25 search, commonly via reciprocal rank fusion, to combine semantic recall with keyword precision."}
+{"doc_id": "deploy", "source": "deploy.md", "text": "Deploy the service with Docker, run a long-lived process to keep the index warm, and store the OpenAI API key in a secrets manager rather than in the image."}
+{"doc_id": "evaluation", "source": "evaluation.md", "text": "Evaluate retrieval quality with precision, recall, F1, mean average precision and nDCG computed against labeled relevance judgments for a set of test queries."}
+{"doc_id": "tenancy", "source": "tenancy.md", "text": "Multi-tenant isolation uses either one vector index per tenant or a single shared index partitioned by a tenant namespace, keeping each tenant's data separate."}
