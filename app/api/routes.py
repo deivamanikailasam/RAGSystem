@@ -37,12 +37,16 @@ from app.models import (
     IngestResponse,
     QueryRequest,
     QueryResponse,
+    SimulateRequest,
+    SimulateResponse,
     TenantStats,
     VoiceEventRequest,
     VoiceEventResponse,
     VoiceSessionCreate,
     VoiceSessionResponse,
 )
+from app.core.flow_diagram import flow_path_diagram, flow_sequence_diagram
+from app.core.simulator import Flow
 from app.core.voice_fsm import Event, InvalidTransition
 from app.core.voice_session import SessionNotFound
 from app.observability.metrics import METRICS
@@ -188,6 +192,29 @@ def delete_conversation(
 ) -> DeleteConversationResponse:
     deleted = engine.delete_conversation(tenant=tenant, session_id=session_id)
     return DeleteConversationResponse(session_id=session_id, deleted_messages=deleted)
+
+
+@router.post("/v1/simulate", response_model=SimulateResponse, tags=["simulate"])
+def simulate_flow(
+    body: SimulateRequest,
+    tenant: str = Depends(require_tenant),
+    engine: RagEngine = Depends(get_engine),
+) -> SimulateResponse:
+    """Run a scripted conversation flow and return the trace + Mermaid diagrams."""
+    if body.channel not in ("dialogue", "faq", "voice"):
+        raise HTTPException(status_code=422, detail=f"Unknown channel '{body.channel}'.")
+    flow = Flow(name=body.name, channel=body.channel, turns=body.turns,
+                user_id=body.user_id, session_id=body.session_id)
+    trace = engine.simulator.run(tenant=tenant, flow=flow)
+    return SimulateResponse(
+        name=trace.name, channel=trace.channel, session_id=trace.session_id,
+        states=trace.states,
+        steps=[vars(s) for s in trace.steps],
+        diagrams={
+            "sequence": flow_sequence_diagram(trace),
+            "path": flow_path_diagram(trace),
+        },
+    )
 
 
 @router.post("/v1/faqs", response_model=FAQItem, tags=["faq"])

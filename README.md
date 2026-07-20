@@ -135,6 +135,7 @@ DEPLOYMENT_MODE=multi_tenant ADMIN_API_KEY=secret uvicorn app.main:app
 | POST   | `/v1/faqs`       | Add a curated FAQ (list/delete too)           | tenant |
 | POST   | `/v1/faq/ask`    | Context-aware FAQ answer (FAQ-first + memory)  | tenant |
 | GET/DELETE | `/v1/memory/{user_id}` | User's long-term memory / forget      | tenant |
+| POST   | `/v1/simulate`   | Simulate a conversation flow → trace + diagrams | tenant |
 | POST   | `/v1/ingest`     | Ingest raw text                               | tenant |
 | POST   | `/v1/ingest/file`| Ingest an uploaded file (PDF/MD/TXT/HTML)     | tenant |
 | POST   | `/v1/query`      | Ask a question (RAG)                          | tenant |
@@ -180,6 +181,8 @@ app/
     faq.py             # curated FAQ store + semantic/lexical matcher
     memory.py          # per-user long-term memory (cross-session) + extraction
     faqbot.py          # FAQ-first + memory-augmented answer orchestration
+    simulator.py       # scripted conversation-flow simulator (dialogue/faq/voice)
+    flow_diagram.py    # Mermaid state / sequence / path diagram generators
     rag.py             # end-to-end orchestration + per-tenant policy/quotas
   api/routes.py        # tenant HTTP endpoints
   api/admin.py         # /admin/* tenant control plane (multi-tenant)
@@ -233,6 +236,7 @@ python eval/retrieval_eval.py       # precision/recall/F1/MAP/nDCG on labeled da
 python eval/retrieval_eval.py --compare   # metrics across vector/bm25/hybrid
 python scripts/compare_rerank.py    # compare reranking strategies side by side
 python scripts/compare_retrieval.py # compare vector / bm25 / hybrid modes
+python scripts/simulate_flows.py    # simulate conversation flows -> Mermaid diagrams
 ```
 
 ---
@@ -257,6 +261,7 @@ brief, each with step-by-step instructions and pointers to the implementing code
 13. [Voice-assistant session state machine](docs/13-voice-session-state-machine.md)
 14. [Dialogue manager with intent persistence](docs/14-dialogue-manager.md)
 15. [Context-aware FAQ bot with memory](docs/15-faq-bot-memory.md)
+16. [Simulating conversation flows with state diagrams](docs/16-conversation-flow-simulation.md)
 
 ---
 

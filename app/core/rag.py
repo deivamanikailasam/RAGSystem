@@ -36,6 +36,7 @@ from app.core.ingest import IngestedDocResult, IngestionPipeline
 from app.core.intents import build_intent_classifier
 from app.core.reranker import build_reranker
 from app.core.retriever import Retriever
+from app.core.simulator import ConversationSimulator
 from app.core.tenants import QuotaExceeded, Tenant, TenantRegistry
 from app.core.vector_store import VectorStore
 from app.core.voice_session import VoiceSessionManager, VoiceSessionStore
@@ -87,6 +88,7 @@ class RagEngine:
         self.faq_matcher = FAQMatcher(self.embeddings, self.faqs)
         self.memory = MemoryStore(settings.data_dir / "memory.db")
         self.faq_bot = FAQBot(self, self.faq_matcher, self.memory, settings)
+        self.simulator = ConversationSimulator(self)
 
         if not settings.is_single_tenant:
             self._seed_static_tenants()

@@ -179,6 +179,32 @@ class VoiceEventResponse(BaseModel):
 
 
 # --------------------------------------------------------------------------- #
+# Conversation flow simulation
+# --------------------------------------------------------------------------- #
+class SimulateRequest(BaseModel):
+    channel: str = Field(..., description="'dialogue' | 'faq' | 'voice'.")
+    turns: list = Field(
+        ...,
+        description="dialogue/faq: list of message strings; "
+        "voice: list of {event, text?} objects.",
+    )
+    name: str = "flow"
+    user_id: str | None = None
+    session_id: str | None = None
+
+
+class SimulateResponse(BaseModel):
+    name: str
+    channel: str
+    session_id: str
+    states: list[str]
+    steps: list[dict]
+    diagrams: dict[str, str] = Field(
+        ..., description="Mermaid strings: 'sequence' and 'path'."
+    )
+
+
+# --------------------------------------------------------------------------- #
 # Context-aware FAQ bot with memory
 # --------------------------------------------------------------------------- #
 class FAQCreate(BaseModel):
