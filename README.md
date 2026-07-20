@@ -1,4 +1,4 @@
-# QASystem — Production-Grade RAG Document Q&A (FAISS + OpenAI)
+# RAGSystem — Production-Grade RAG Document Q&A (FAISS + OpenAI)
 
 A reference implementation of an **enterprise document Q&A system** built on the
 Retrieval-Augmented Generation (RAG) pattern using **FAISS** as the vector store
@@ -97,7 +97,7 @@ Every layer is covered in depth in [`docs/`](docs/).
 
 ## Deployment modes
 
-QASystem runs in either of two modes, chosen with a single env var
+RAGSystem runs in either of two modes, chosen with a single env var
 `DEPLOYMENT_MODE` — see [`docs/07-deployment-modes.md`](docs/07-deployment-modes.md)
 for the full step-by-step guide.
 

@@ -1,6 +1,6 @@
 # 7. Deployment Modes: Single-Tenant vs Multi-Tenant
 
-QASystem ships **two deployment modes** behind a single config switch, so you
+RAGSystem ships **two deployment modes** behind a single config switch, so you
 can start with an internal doc bot on a limited corpus and grow into a
 multi-tenant platform without re-architecting.
 

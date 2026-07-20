@@ -1,4 +1,4 @@
-# QASystem Documentation
+# RAGSystem Documentation
 
 Step-by-step documentation for the full product lifecycle of a FAISS + OpenAI
 RAG document Q&A system. Each stage links to the code that implements it.

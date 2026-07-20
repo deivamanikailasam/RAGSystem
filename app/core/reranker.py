@@ -33,7 +33,7 @@ from typing import Protocol
 from app.config import Settings
 from app.core.retriever import RetrievedChunk
 
-logger = logging.getLogger("qasystem.reranker")
+logger = logging.getLogger("ragsystem.reranker")
 
 _WORD_RE = re.compile(r"[a-z0-9]+")
 

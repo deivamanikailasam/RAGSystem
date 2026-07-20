@@ -35,14 +35,14 @@ def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         mode = "OpenAI" if settings.use_openai else "local-fallback (offline)"
-        logging.getLogger("qasystem").info(
-            "QASystem %s starting in %s mode (index=%s)",
+        logging.getLogger("ragsystem").info(
+            "RAGSystem %s starting in %s mode (index=%s)",
             __version__, mode, settings.faiss_index_type,
         )
         yield
 
     app = FastAPI(
-        title="QASystem — RAG Document Q&A",
+        title="RAGSystem — RAG Document Q&A",
         version=__version__,
         description="FAISS + OpenAI retrieval-augmented document question answering.",
         lifespan=lifespan,

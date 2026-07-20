@@ -87,7 +87,7 @@ def main() -> int:
         engine = build_engine(Path(tmp))
         results = evaluate(engine, cases, k=5)
 
-    print("=== QASystem offline evaluation ===")
+    print("=== RAGSystem offline evaluation ===")
     for key, value in results.items():
         print(f"  {key:20s}: {value}")
     # Fail CI if retrieval regresses below a floor.
